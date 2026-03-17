@@ -1,68 +1,88 @@
-# ============================================================
-# Pre-Delinquency Intervention Engine - Python Dependencies
-# ============================================================
+# ─────────────────────────────────────────────
+# Core
+# ─────────────────────────────────────────────
+psycopg2-binary>=2.9.9
+sqlalchemy>=2.0.0
+redis>=5.0.0
+kafka-python>=2.0.2
+pydantic>=2.0.0
+python-dotenv>=1.0.0
+faker>=20.0.0
 
-# --- Kafka ---
-kafka-python==2.0.2
-confluent-kafka==2.3.0
+# ─────────────────────────────────────────────
+# ML Training - XGBoost, LightGBM, PyTorch, scikit-learn
+# ─────────────────────────────────────────────
+xgboost>=2.0.0
+lightgbm>=4.0.0
+torch>=2.0.0
+scikit-learn>=1.3.0
+numpy>=1.24.0
+pandas>=2.0.0
 
-# --- Redis ---
-redis==5.0.1
+# ─────────────────────────────────────────────
+# Explainability - SHAP, LIME
+# ─────────────────────────────────────────────
+shap>=0.42.0
+lime>=0.2.0.1
 
-# --- PostgreSQL ---
-psycopg2-binary==2.9.9
-sqlalchemy==2.0.23
+# ─────────────────────────────────────────────
+# Bias & Fairness - Fairlearn, AIF360
+# ─────────────────────────────────────────────
+fairlearn>=0.9.0
+aif360>=0.6.0
 
-# --- Apache Spark ---
-pyspark==3.5.0
+# ─────────────────────────────────────────────
+# Model Serving - BentoML, MLflow
+# ─────────────────────────────────────────────
+bentoml>=1.2.0
+mlflow>=2.11.0
 
-# --- Feature Store ---
-feast==0.36.0
+# ─────────────────────────────────────────────
+# Feature Store - Feast
+# ─────────────────────────────────────────────
+feast>=0.35.0
 
-# --- ML Training ---
-xgboost==2.0.3
-scikit-learn==1.3.2
-torch==2.1.2
-numpy==1.26.2
-pandas==2.1.4
+# ─────────────────────────────────────────────
+# Stream Processing - Apache Flink
+# ─────────────────────────────────────────────
+apache-flink>=1.18.0
 
-# --- Explainability ---
-shap==0.44.0
+# ─────────────────────────────────────────────
+# Scoring Service - FastAPI
+# ─────────────────────────────────────────────
+fastapi>=0.104.0
+uvicorn>=0.24.0
+httpx>=0.25.0
 
-# --- Model Serving & Registry ---
-mlflow==2.9.2
-bentoml==1.1.11
+# ─────────────────────────────────────────────
+# Intervention Engine - Celery, Apprise
+# ─────────────────────────────────────────────
+celery>=5.3.0
+apprise>=1.6.0
 
-# --- FastAPI ---
-fastapi==0.104.1
-uvicorn==0.24.0
-pydantic==2.5.3
-pydantic-settings==2.1.0
-httpx==0.25.2
+# ─────────────────────────────────────────────
+# Visualization - Plotly Dash
+# ─────────────────────────────────────────────
+plotly>=5.18.0
+dash>=2.14.0
+dash-bootstrap-components>=1.5.0
 
-# --- Celery ---
-celery==5.3.6
+# ─────────────────────────────────────────────
+# Feedback & Retraining - Evidently AI
+# ─────────────────────────────────────────────
+evidently>=0.4.0
 
-# --- Outreach ---
-apprise==1.7.1
+# ─────────────────────────────────────────────
+# Orchestration - Apache Airflow
+# ─────────────────────────────────────────────
+apache-airflow>=2.8.0
 
-# --- Dashboard ---
-dash==2.14.2
-dash-bootstrap-components==1.5.0
-plotly==5.18.0
+# ─────────────────────────────────────────────
+# Debezium CDC (Python client for registration)
+# ─────────────────────────────────────────────
+requests>=2.31.0
 
-# --- Monitoring & Drift ---
-evidently==0.4.13
-
-# --- Fairness ---
-fairlearn==0.9.0
-
-# --- Airflow (installed separately or via pip) ---
-apache-airflow==2.8.0
-
-# --- Utilities ---
-python-dotenv==1.0.0
-faker==22.0.0
-tqdm==4.66.1
-joblib==1.3.2
-requests==2.31.0
+# ─────────────────────────────────────────────
+# Utilities
+# ─────────────────────────────────────────────
+joblib>=1.3.0

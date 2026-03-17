@@ -1,8 +1,8 @@
 services:
   # ─────────────────────────────────────────────
-  # Zookeeper (required by Kafka)
+  # Core Infrastructure
   # ─────────────────────────────────────────────
-  zookeeper:
+  pdi-zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
     container_name: pdi-zookeeper
     environment:
@@ -10,49 +10,40 @@ services:
       ZOOKEEPER_TICK_TIME: 2000
     ports:
       - "2181:2181"
-    volumes:
-      - zookeeper_data:/var/lib/zookeeper/data
+    networks:
+      - pdi-network
     healthcheck:
-      test: ["CMD", "bash", "-c", "echo ruok | nc localhost 2181"]
+      test: ["CMD", "echo", "ruok", "|", "nc", "localhost", "2181"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # ─────────────────────────────────────────────
-  # Apache Kafka
-  # ─────────────────────────────────────────────
-  kafka:
+  pdi-kafka:
     image: confluentinc/cp-kafka:7.5.0
     container_name: pdi-kafka
     depends_on:
-      zookeeper:
+      pdi-zookeeper:
         condition: service_healthy
     ports:
       - "9092:9092"
-      - "29092:29092"
     environment:
       KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_ZOOKEEPER_CONNECT: pdi-zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://pdi-kafka:9092,PLAINTEXT_HOST://localhost:29092
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
-      KAFKA_LOG_RETENTION_HOURS: 168
-      KAFKA_MESSAGE_MAX_BYTES: 10485760
-    volumes:
-      - kafka_data:/var/lib/kafka/data
+    networks:
+      - pdi-network
     healthcheck:
-      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
       interval: 15s
       timeout: 10s
-      retries: 10
+      retries: 5
 
-  # ─────────────────────────────────────────────
-  # PostgreSQL
-  # ─────────────────────────────────────────────
-  postgres:
-    image: postgres:15
+  pdi-postgres:
+    image: postgres:16
     container_name: pdi-postgres
     environment:
       POSTGRES_USER: pdi_user
@@ -61,35 +52,39 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - pdi-postgres-data:/var/lib/postgresql/data
       - ./init_db.sql:/docker-entrypoint-initdb.d/init_db.sql
+    command: >
+      postgres
+        -c wal_level=logical
+        -c max_wal_senders=5
+        -c max_replication_slots=5
+    networks:
+      - pdi-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U pdi_user -d pdi_db"]
-      interval: 10s
+      interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
 
-  # ─────────────────────────────────────────────
-  # Redis
-  # ─────────────────────────────────────────────
-  redis:
+  pdi-redis:
     image: redis:7-alpine
     container_name: pdi-redis
     ports:
       - "6379:6379"
-    volumes:
-      - redis_data:/data
-    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    networks:
+      - pdi-network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
+      interval: 5s
+      timeout: 3s
       retries: 5
 
   # ─────────────────────────────────────────────
-  # Apache Flink - JobManager
+  # Stream Processing - Apache Flink
   # ─────────────────────────────────────────────
-  flink-jobmanager:
+  pdi-flink-jobmanager:
     image: flink:1.18
     container_name: pdi-flink-jobmanager
     ports:
@@ -97,80 +92,166 @@ services:
     command: jobmanager
     environment:
       FLINK_PROPERTIES: |
-        jobmanager.rpc.address: flink-jobmanager
+        jobmanager.rpc.address: pdi-flink-jobmanager
         taskmanager.numberOfTaskSlots: 4
         parallelism.default: 2
-        state.backend: hashmap
-        state.checkpoints.dir: file:///tmp/flink-checkpoints
-        execution.checkpointing.interval: 30000
-    volumes:
-      - flink_data:/tmp/flink-checkpoints
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8081/overview"]
-      interval: 15s
-      timeout: 10s
-      retries: 10
+    networks:
+      - pdi-network
 
-  # ─────────────────────────────────────────────
-  # Apache Flink - TaskManager
-  # ─────────────────────────────────────────────
-  flink-taskmanager:
+  pdi-flink-taskmanager:
     image: flink:1.18
     container_name: pdi-flink-taskmanager
     depends_on:
-      flink-jobmanager:
-        condition: service_healthy
+      - pdi-flink-jobmanager
     command: taskmanager
     environment:
       FLINK_PROPERTIES: |
-        jobmanager.rpc.address: flink-jobmanager
+        jobmanager.rpc.address: pdi-flink-jobmanager
         taskmanager.numberOfTaskSlots: 4
-        taskmanager.memory.process.size: 2048m
-    volumes:
-      - flink_data:/tmp/flink-checkpoints
+        taskmanager.memory.process.size: 1024m
+    networks:
+      - pdi-network
 
   # ─────────────────────────────────────────────
-  # Apache Spark - Master
+  # Batch Processing - Apache Spark
   # ─────────────────────────────────────────────
-  spark-master:
+  pdi-spark-master:
     image: apache/spark:3.5.3
     container_name: pdi-spark-master
-    command: /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
-    environment:
-      SPARK_MASTER_HOST: spark-master
-      SPARK_MASTER_PORT: 7077
-      SPARK_MASTER_WEBUI_PORT: 8082
     ports:
       - "7077:7077"
-      - "8082:8082"
-    volumes:
-      - spark_data:/opt/spark-data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8082"]
-      interval: 15s
-      timeout: 10s
-      retries: 10
+      - "8082:8080"
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
+    environment:
+      SPARK_MODE: master
+    networks:
+      - pdi-network
 
-  # ─────────────────────────────────────────────
-  # Apache Spark - Worker
-  # ─────────────────────────────────────────────
-  spark-worker:
+  pdi-spark-worker:
     image: apache/spark:3.5.3
     container_name: pdi-spark-worker
     depends_on:
-      spark-master:
-        condition: service_healthy
-    command: /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077
+      - pdi-spark-master
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://pdi-spark-master:7077
     environment:
-      SPARK_WORKER_MEMORY: 2g
+      SPARK_MODE: worker
+      SPARK_WORKER_MEMORY: 1g
       SPARK_WORKER_CORES: 2
+    networks:
+      - pdi-network
+
+  # ─────────────────────────────────────────────
+  # Debezium CDC (Change Data Capture)
+  # ─────────────────────────────────────────────
+  pdi-debezium:
+    image: debezium/connect:2.5
+    container_name: pdi-debezium
+    depends_on:
+      pdi-kafka:
+        condition: service_healthy
+      pdi-postgres:
+        condition: service_healthy
+    ports:
+      - "8083:8083"
+    environment:
+      BOOTSTRAP_SERVERS: pdi-kafka:9092
+      GROUP_ID: pdi-debezium-connect
+      CONFIG_STORAGE_TOPIC: pdi.debezium.configs
+      OFFSET_STORAGE_TOPIC: pdi.debezium.offsets
+      STATUS_STORAGE_TOPIC: pdi.debezium.status
+      CONFIG_STORAGE_REPLICATION_FACTOR: 1
+      OFFSET_STORAGE_REPLICATION_FACTOR: 1
+      STATUS_STORAGE_REPLICATION_FACTOR: 1
+    networks:
+      - pdi-network
+
+  # ─────────────────────────────────────────────
+  # MLflow Model Registry
+  # ─────────────────────────────────────────────
+  pdi-mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.11.0
+    container_name: pdi-mlflow
+    ports:
+      - "5000:5000"
+    command: >
+      mlflow server
+        --host 0.0.0.0
+        --port 5000
+        --backend-store-uri postgresql://pdi_user:pdi_password@pdi-postgres:5432/pdi_db
+        --default-artifact-root /mlflow/artifacts
+    depends_on:
+      pdi-postgres:
+        condition: service_healthy
     volumes:
-      - spark_data:/opt/spark-data
+      - pdi-mlflow-artifacts:/mlflow/artifacts
+    networks:
+      - pdi-network
+
+  # ─────────────────────────────────────────────
+  # Grafana Monitoring
+  # ─────────────────────────────────────────────
+  pdi-grafana:
+    image: grafana/grafana:10.3.1
+    container_name: pdi-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: pdi_admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_DASHBOARDS_MIN_REFRESH_INTERVAL: 5s
+    volumes:
+      - pdi-grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
+    depends_on:
+      pdi-postgres:
+        condition: service_healthy
+    networks:
+      - pdi-network
+
+  # ─────────────────────────────────────────────
+  # Apache Superset
+  # ─────────────────────────────────────────────
+  pdi-superset:
+    image: apache/superset:3.1.0
+    container_name: pdi-superset
+    ports:
+      - "8088:8088"
+    environment:
+      SUPERSET_SECRET_KEY: pdi-superset-secret-key-change-in-production
+      SUPERSET_LOAD_EXAMPLES: "no"
+      DATABASE_DB: pdi_db
+      DATABASE_HOST: pdi-postgres
+      DATABASE_PASSWORD: pdi_password
+      DATABASE_USER: pdi_user
+      DATABASE_PORT: 5432
+      REDIS_HOST: pdi-redis
+      REDIS_PORT: 6379
+    volumes:
+      - ./monitoring/superset_config.py:/app/pythonpath/superset_config.py
+      - pdi-superset-data:/app/superset_home
+    depends_on:
+      pdi-postgres:
+        condition: service_healthy
+      pdi-redis:
+        condition: service_healthy
+    command: >
+      bash -c "
+        superset db upgrade &&
+        superset fab create-admin --username admin --firstname Admin --lastname PDI --email admin@pdi.local --password admin 2>/dev/null;
+        superset init &&
+        superset run -h 0.0.0.0 -p 8088 --with-threads
+      "
+    networks:
+      - pdi-network
 
 volumes:
-  zookeeper_data:
-  kafka_data:
-  postgres_data:
-  redis_data:
-  flink_data:
-  spark_data:
+  pdi-postgres-data:
+  pdi-mlflow-artifacts:
+  pdi-grafana-data:
+  pdi-superset-data:
+
+networks:
+  pdi-network:
+    driver: bridge

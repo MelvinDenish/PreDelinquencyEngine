@@ -1,0 +1,75 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-worker
+  namespace: pdi-engine
+  labels:
+    app: celery-worker
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: celery-worker
+  template:
+    metadata:
+      labels:
+        app: celery-worker
+    spec:
+      containers:
+        - name: celery-worker
+          image: pdi-engine:latest
+          command: ["celery", "-A", "intervention.celery_app", "worker",
+                    "--loglevel=info", "--queues=interventions,scoring",
+                    "--concurrency=4"]
+          env:
+            - name: POSTGRES_HOST
+              value: "pdi-postgres"
+            - name: REDIS_HOST
+              value: "pdi-redis"
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: "pdi-kafka:9092"
+            - name: CELERY_BROKER_URL
+              value: "redis://pdi-redis:6379/1"
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "200m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-beat
+  namespace: pdi-engine
+  labels:
+    app: celery-beat
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: celery-beat
+  template:
+    metadata:
+      labels:
+        app: celery-beat
+    spec:
+      containers:
+        - name: celery-beat
+          image: pdi-engine:latest
+          command: ["celery", "-A", "intervention.celery_app", "beat",
+                    "--loglevel=info"]
+          env:
+            - name: REDIS_HOST
+              value: "pdi-redis"
+            - name: CELERY_BROKER_URL
+              value: "redis://pdi-redis:6379/1"
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"

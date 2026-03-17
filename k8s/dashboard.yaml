@@ -1,0 +1,49 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dashboard
+  namespace: pdi-engine
+  labels:
+    app: dashboard
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dashboard
+  template:
+    metadata:
+      labels:
+        app: dashboard
+    spec:
+      containers:
+        - name: dashboard
+          image: pdi-engine:latest
+          command: ["python", "main.py", "dashboard"]
+          ports:
+            - containerPort: 8050
+          env:
+            - name: POSTGRES_HOST
+              value: "pdi-postgres"
+            - name: REDIS_HOST
+              value: "pdi-redis"
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "200m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pdi-dashboard
+  namespace: pdi-engine
+spec:
+  selector:
+    app: dashboard
+  ports:
+    - port: 8050
+      targetPort: 8050
+  type: LoadBalancer

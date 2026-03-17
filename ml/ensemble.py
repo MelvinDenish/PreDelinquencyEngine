@@ -1,7 +1,7 @@
 """
 Ensemble Scorer
-Combines XGBoost (tabular) and LSTM (temporal) predictions
-into a unified delinquency risk score.
+Combines XGBoost, LightGBM, and LSTM predictions into a single risk score.
+Uses weighted averaging with configurable weights for each model.
 """
 import os
 import sys
@@ -15,63 +15,116 @@ logger = logging.getLogger(__name__)
 
 
 class EnsembleScorer:
-    """
-    Weighted ensemble that combines XGBoost and LSTM predictions.
-    Default weights: 0.6 XGBoost + 0.4 LSTM (as per project spec).
-    """
+    """3-model ensemble: XGBoost + LightGBM + LSTM."""
 
-    def __init__(self, xgboost_weight: float = None, lstm_weight: float = None):
-        self.xgboost_weight = xgboost_weight or ModelConfig.XGBOOST_WEIGHT
-        self.lstm_weight = lstm_weight or ModelConfig.LSTM_WEIGHT
-
-        # Ensure weights sum to 1
-        total = self.xgboost_weight + self.lstm_weight
-        self.xgboost_weight /= total
-        self.lstm_weight /= total
-
-    def combine(self, xgboost_prob: float, lstm_prob: float = None) -> float:
+    def __init__(self, xgb_weight: float = None, lgb_weight: float = None,
+                 lstm_weight: float = None):
         """
-        Combine XGBoost and LSTM probabilities.
-        If LSTM is not available, fall back to XGBoost only.
+        Initialize ensemble with configurable weights.
+        Default: XGBoost 0.40, LightGBM 0.30, LSTM 0.30
+        Falls back to 2-model or 1-model if components are missing.
         """
-        if lstm_prob is None:
-            return float(xgboost_prob)
+        self.xgb_weight = xgb_weight or ModelConfig.ENSEMBLE_XGB_WEIGHT
+        self.lgb_weight = lgb_weight or getattr(ModelConfig, 'ENSEMBLE_LGB_WEIGHT', 0.30)
+        self.lstm_weight = lstm_weight or ModelConfig.ENSEMBLE_LSTM_WEIGHT
 
-        ensemble_score = (
-            self.xgboost_weight * xgboost_prob +
-            self.lstm_weight * lstm_prob
-        )
+    def combine(self, xgb_prob: float = None, lgb_prob: float = None,
+                lstm_prob: float = None) -> float:
+        """
+        Combine model predictions using weighted average.
+        Handles missing models by redistributing weights.
+        """
+        scores = []
+        weights = []
+
+        if xgb_prob is not None:
+            scores.append(xgb_prob)
+            weights.append(self.xgb_weight)
+
+        if lgb_prob is not None:
+            scores.append(lgb_prob)
+            weights.append(self.lgb_weight)
+
+        if lstm_prob is not None:
+            scores.append(lstm_prob)
+            weights.append(self.lstm_weight)
+
+        if not scores:
+            return 0.5  # Default when no models available
+
+        # Normalize weights
+        total_weight = sum(weights)
+        normalized_weights = [w / total_weight for w in weights]
+
+        ensemble_score = sum(s * w for s, w in zip(scores, normalized_weights))
         return float(np.clip(ensemble_score, 0, 1))
 
-    def combine_batch(self, xgboost_probs: np.ndarray,
+    def combine_batch(self, xgb_probs: np.ndarray = None,
+                      lgb_probs: np.ndarray = None,
                       lstm_probs: np.ndarray = None) -> np.ndarray:
         """Combine batch predictions."""
-        if lstm_probs is None:
-            return xgboost_probs.astype(float)
+        available = []
+        weights = []
 
-        # Align lengths if different
-        min_len = min(len(xgboost_probs), len(lstm_probs))
-        xg = xgboost_probs[:min_len]
-        ls = lstm_probs[:min_len]
+        if xgb_probs is not None:
+            available.append(xgb_probs)
+            weights.append(self.xgb_weight)
 
-        ensemble = self.xgboost_weight * xg + self.lstm_weight * ls
-        return np.clip(ensemble, 0, 1).astype(float)
+        if lgb_probs is not None:
+            available.append(lgb_probs)
+            weights.append(self.lgb_weight)
+
+        if lstm_probs is not None:
+            available.append(lstm_probs)
+            weights.append(self.lstm_weight)
+
+        if not available:
+            return np.full(len(xgb_probs or lgb_probs or lstm_probs), 0.5)
+
+        total = sum(weights)
+        result = sum(p * (w / total) for p, w in zip(available, weights))
+        return np.clip(result, 0, 1)
 
     @staticmethod
     def score_to_risk_tier(score: float) -> str:
         """Map ensemble score to risk tier."""
-        if score >= ModelConfig.RISK_CRITICAL_THRESHOLD:
+        if score >= 0.7:
             return "critical"
-        elif score >= ModelConfig.RISK_WATCH_THRESHOLD:
+        elif score >= 0.5:
             return "watch"
-        else:
-            return "stable"
+        return "stable"
 
     @staticmethod
-    def score_to_credit_score(probability: float) -> int:
-        """
-        Map delinquency probability to credit score.
-        Formula: 850 - probability * 550 (as per project spec).
-        """
-        credit_score = int(850 - probability * 550)
-        return max(300, min(850, credit_score))
+    def score_to_credit_score(score: float) -> int:
+        """Map ensemble risk score to credit score equivalent (300-900)."""
+        return int(900 - (score * 600))
+
+    def get_model_contributions(self, xgb_prob: float = None,
+                                 lgb_prob: float = None,
+                                 lstm_prob: float = None) -> dict:
+        """Return individual model contributions to the ensemble."""
+        ensemble = self.combine(xgb_prob, lgb_prob, lstm_prob)
+        contributions = {}
+
+        if xgb_prob is not None:
+            contributions["xgboost"] = {
+                "raw_score": float(xgb_prob),
+                "weight": self.xgb_weight,
+                "contribution": float(xgb_prob * self.xgb_weight),
+            }
+        if lgb_prob is not None:
+            contributions["lightgbm"] = {
+                "raw_score": float(lgb_prob),
+                "weight": self.lgb_weight,
+                "contribution": float(lgb_prob * self.lgb_weight),
+            }
+        if lstm_prob is not None:
+            contributions["lstm"] = {
+                "raw_score": float(lstm_prob),
+                "weight": self.lstm_weight,
+                "contribution": float(lstm_prob * self.lstm_weight),
+            }
+
+        contributions["ensemble_score"] = float(ensemble)
+        contributions["risk_tier"] = self.score_to_risk_tier(ensemble)
+        return contributions

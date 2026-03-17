@@ -69,8 +69,12 @@ class FeastConfig:
 
 
 class MLflowConfig:
-    TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", f"sqlite:///{PROJECT_ROOT / 'mlflow.db'}")
+    TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
     EXPERIMENT_NAME = os.getenv("MLFLOW_EXPERIMENT_NAME", "pdi_delinquency_prediction")
+
+
+class DebeziumConfig:
+    CONNECT_URL = os.getenv("DEBEZIUM_CONNECT_URL", "http://localhost:8083")
 
 
 class CeleryConfig:
@@ -90,8 +94,10 @@ class DashboardConfig:
 
 
 class ModelConfig:
-    XGBOOST_WEIGHT = float(os.getenv("XGBOOST_WEIGHT", 0.6))
-    LSTM_WEIGHT = float(os.getenv("LSTM_WEIGHT", 0.4))
+    # 3-model ensemble weights (XGBoost + LightGBM + LSTM)
+    ENSEMBLE_XGB_WEIGHT = float(os.getenv("ENSEMBLE_XGB_WEIGHT", 0.40))
+    ENSEMBLE_LGB_WEIGHT = float(os.getenv("ENSEMBLE_LGB_WEIGHT", 0.30))
+    ENSEMBLE_LSTM_WEIGHT = float(os.getenv("ENSEMBLE_LSTM_WEIGHT", 0.30))
     RISK_CRITICAL_THRESHOLD = float(os.getenv("RISK_CRITICAL_THRESHOLD", 0.7))
     RISK_WATCH_THRESHOLD = float(os.getenv("RISK_WATCH_THRESHOLD", 0.5))
     COOLDOWN_DAYS = int(os.getenv("COOLDOWN_DAYS", 7))
