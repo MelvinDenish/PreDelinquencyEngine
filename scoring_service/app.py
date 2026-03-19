@@ -2,7 +2,7 @@
 FastAPI Scoring Service
 Provides REST endpoints for real-time delinquency risk scoring.
 Integrates Feast feature retrieval, XGBoost + LightGBM + LSTM ensemble inference,
-SHAP + LIME explainability, and risk score storage.
+SHAP + LIME explainability, Cassandra risk score storage, and Prometheus metrics.
 """
 import os
 import sys
@@ -30,6 +30,7 @@ from ml.lightgbm_model import LightGBMDelinquencyModel
 from ml.lstm_model import LSTMDelinquencyModel
 from ml.ensemble import EnsembleScorer
 from ml.explainability import SHAPExplainer
+from scoring_service.cassandra_client import write_risk_score as cassandra_write_risk_score
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -39,8 +40,8 @@ logging.basicConfig(level=logging.INFO)
 # ─────────────────────────────────────────────
 app = FastAPI(
     title="Pre-Delinquency Intervention Engine - Scoring Service",
-    description="Real-time delinquency risk scoring with SHAP + LIME explainability (XGBoost + LightGBM + LSTM ensemble)",
-    version="2.0.0",
+    description="Real-time delinquency risk scoring with SHAP + LIME explainability (XGBoost + LightGBM + LSTM ensemble) + Prometheus metrics + Cassandra storage",
+    version="2.1.0",
 )
 
 app.add_middleware(
@@ -50,6 +51,23 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ─────────────────────────────────────────────
+# Prometheus Metrics (prometheus-fastapi-instrumentator)
+# ─────────────────────────────────────────────
+try:
+    from prometheus_fastapi_instrumentator import Instrumentator
+    _instrumentator = Instrumentator(
+        should_group_status_codes=True,
+        should_ignore_untemplated=True,
+        should_instrument_requests_inprogress=True,
+        inprogress_labels=True,
+    ).instrument(app)
+    _prometheus_enabled = True
+    logger.info("Prometheus instrumentation enabled — metrics at /metrics")
+except ImportError:
+    _prometheus_enabled = False
+    logger.warning("prometheus-fastapi-instrumentator not installed; /metrics disabled")
 
 # ─────────────────────────────────────────────
 # Global model instances (loaded on startup)
@@ -207,6 +225,10 @@ async def load_models():
     """Load all models on startup."""
     global xgb_model, lgb_model, lstm_model, ensemble, shap_explainer, lime_explainer, redis_client
 
+    # Expose Prometheus /metrics endpoint
+    if _prometheus_enabled:
+        _instrumentator.expose(app, endpoint="/metrics")
+
     redis_client = redis_lib.Redis(
         host=RedisConfig.HOST, port=RedisConfig.PORT, db=RedisConfig.DB,
     )
@@ -351,7 +373,23 @@ async def score_customer(request: ScoreRequest):
     try:
         store_risk_score(score_data)
     except Exception as e:
-        logger.warning(f"Score storage failed: {e}")
+        logger.warning(f"PostgreSQL/Redis score storage failed: {e}")
+
+    # Cassandra — high-throughput time-series risk score storage
+    try:
+        cassandra_write_risk_score(
+            customer_id=customer_id,
+            risk_score=ensemble_score,
+            risk_tier=risk_tier,
+            credit_score=credit_score,
+            xgboost_score=xgb_prob,
+            lightgbm_score=lgb_prob,
+            lstm_score=lstm_prob,
+            ensemble_score=ensemble_score,
+            top_features=json.dumps(top_shap) if top_shap else None,
+        )
+    except Exception as e:
+        logger.warning(f"Cassandra score storage failed (non-blocking): {e}")
 
     return ScoreResponse(
         customer_id=customer_id,
