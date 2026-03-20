@@ -268,6 +268,7 @@ def create_flink_job_local():
         def calc_features(txns, suffix):
             discretionary_cats = {"dining", "entertainment", "clothing", "luxury_goods", "travel"}
             lending_cats = {"lending_app", "payday_lender", "cash_advance"}
+            gambling_cats = {"gambling", "lottery"}
 
             disc_spend = sum(t["amount"] for t in txns
                            if t.get("merchant_category") in discretionary_cats
@@ -294,6 +295,11 @@ def create_flink_job_local():
             avg_amount = sum(debit_amounts) / len(debit_amounts) if debit_amounts else 0
             max_amount = max(debit_amounts) if debit_amounts else 0
 
+            # Gambling + lottery spend (problem statement: "increased gambling, or lottery spend")
+            gambling_spend = sum(t["amount"] for t in txns
+                               if t.get("merchant_category") in gambling_cats
+                               and t.get("direction") == "debit" and t.get("status") == "success")
+
             return {
                 f"discretionary_spend_{suffix}": round(disc_spend, 2),
                 f"atm_withdrawals_count_{suffix}": atm_count,
@@ -304,6 +310,7 @@ def create_flink_job_local():
                 f"txn_count_{suffix}": txn_count,
                 f"avg_txn_amount_{suffix}": round(avg_amount, 2),
                 f"max_txn_amount_{suffix}": round(max_amount, 2),
+                f"gambling_lottery_spend_{suffix}": round(gambling_spend, 2),
             }
 
         features = {}

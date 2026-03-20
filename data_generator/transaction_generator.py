@@ -1,4 +1,4 @@
-﻿"""
+"""
 Transaction Generator
 Generates 6 months of realistic transaction history for all customers,
 including stress patterns for at-risk customers.
@@ -39,6 +39,7 @@ MERCHANT_CATEGORIES = {
     "transfer": (500, 20000, "debit"),
     "lending_app": (1000, 50000, "debit"),
     "gambling": (500, 10000, "debit"),
+    "lottery": (200, 5000, "debit"),
     "luxury_goods": (5000, 100000, "debit"),
     "crypto_exchange": (1000, 30000, "debit"),
     "payday_lender": (2000, 30000, "debit"),
@@ -67,6 +68,7 @@ STRESSED_TXN_PROBS = {
     "payday_lender": 0.03,
     "cash_advance": 0.04,
     "gambling": 0.03,
+    "lottery": 0.04,
     "crypto_exchange": 0.02,
 }
 
@@ -85,6 +87,7 @@ TXN_CHANNELS = {
     "transfer": ["upi", "netbanking"],
     "lending_app": ["upi", "netbanking"],
     "gambling": ["upi"],
+    "lottery": ["upi", "netbanking"],
     "luxury_goods": ["netbanking", "upi"],
     "crypto_exchange": ["netbanking", "upi"],
     "payday_lender": ["netbanking"],

@@ -1,4 +1,4 @@
-﻿"""
+"""
 Rules Engine
 Determines intervention type based on risk tier transitions
 and SHAP-driven signal-aware routing.
@@ -45,6 +45,10 @@ SHAP_INTERVENTION_MAP = {
 
     # ATM patterns -> Wellness check-in
     "atm_withdrawals_count_7d": "wellness_checkin",
+
+    # Gambling / lottery spend -> Wellness check-in
+    "gambling_lottery_spend_7d": "wellness_checkin",
+    "gambling_lottery_spend_30d": "wellness_checkin",
 
     # Default
     "utility_payment_delay_avg": "payment_reminder",
