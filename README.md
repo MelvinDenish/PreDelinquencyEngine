@@ -2,7 +2,9 @@
 
 > **Barclays Hackathon** | College of Engineering Guindy, Chennai
 >
-> AI-driven, event-driven platform that predicts payment defaults **2–4 weeks in advance** using real-time transaction streams, ML ensemble (XGBoost + LightGBM + LSTM), SHAP explainability, and proactive intervention routing.
+> AI-driven, event-driven platform that predicts payment defaults **2–4 weeks in advance** using real-time transaction streams, ML ensemble (XGBoost + LightGBM + LSTM), SHAP explainability, GenAI-powered interventions (Groq), and proactive intervention routing.
+
+📄 **[Full System Documentation](SYSTEM_ARCHITECTURE.md)** | 🐛 **[Troubleshooting Guide](TROUBLESHOOTING.md)** | 🎬 **[Demo Guide (n8n)](DEMO_GUIDE.md)**
 
 ---
 
@@ -102,7 +104,10 @@ All services should show **Up** or **healthy**.
 pip install setuptools wheel
 
 # Install all packages except those that only run inside Docker
-pip install psycopg2-binary sqlalchemy redis kafka-python pydantic python-dotenv faker numpy pandas scikit-learn requests joblib httpx xgboost lightgbm shap torch fastapi uvicorn celery apprise plotly dash dash-bootstrap-components evidently mlflow prometheus-fastapi-instrumentator prometheus-client
+pip install psycopg2-binary sqlalchemy redis kafka-python pydantic python-dotenv faker numpy pandas scikit-learn requests joblib httpx xgboost lightgbm shap torch fastapi uvicorn celery apprise plotly dash dash-bootstrap-components evidently mlflow prometheus-fastapi-instrumentator prometheus-client groq
+
+# Optional: TensorFlow (for alternate LSTM model)
+pip install tensorflow
 ```
 
 ### Step 4 — Verify Core Services are Healthy
@@ -199,6 +204,33 @@ python main.py feedback-consumer
 
 ---
 
+## Running a Demo
+
+### Option 1: Live Simulation Script (Quickest)
+
+```bash
+# Terminal 1: Start scoring service
+python main.py scoring-service
+
+# Terminal 2: Run live simulation (5 demo customers, real-time txns)
+python demo/live_simulation.py
+```
+
+Shows real-time transactions with emojis, risk scores updating, and GenAI-generated intervention messages.
+
+### Option 2: n8n Visual Workflow
+
+See **[DEMO_GUIDE.md](DEMO_GUIDE.md)** for a complete n8n setup that shows data flowing through the pipeline visually — much more impressive for judges.
+
+### GenAI Setup (Optional — Recommended)
+
+To enable AI-generated intervention messages:
+1. Get a free API key from https://console.groq.com/keys
+2. Edit `.env`: `GROQ_API_KEY=gsk_your_key_here`
+3. The system falls back to static templates if the key is not set.
+
+---
+
 ## All Pipeline Commands
 
 | Command | Description |
@@ -247,8 +279,9 @@ python main.py feedback-consumer
 | **Batch Processing** | Apache Spark, Apache Airflow |
 | **Feature Store** | Feast — Redis (online), PostgreSQL (offline) |
 | **Data Warehouse** | ClickHouse / PostgreSQL |
-| **ML Training** | XGBoost, LightGBM, PyTorch (LSTM), scikit-learn |
+| **ML Training** | XGBoost, LightGBM, PyTorch (LSTM), TensorFlow (LSTM), scikit-learn |
 | **Explainability** | SHAP, LIME |
+| **GenAI** | Groq API (Llama 3.3 70B) — personalized intervention messages |
 | **Model Serving** | FastAPI, BentoML, MLflow |
 | **Risk Score Storage** | Redis (fast lookup), Apache Cassandra (history) |
 | **Alerting & Intervention** | Python Rules Engine, Celery |
@@ -284,32 +317,13 @@ docker compose down -v
 
 ## Troubleshooting
 
-### Cassandra takes too long to start
-Cassandra needs ~60 seconds on first boot. Check with:
-```bash
-docker logs pdi-cassandra --tail 20
-```
-Wait until you see `Starting listening for CQL clients`.
+See **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** for a complete guide covering 16+ common errors with step-by-step solutions, including:
 
-### Airflow fails to start
-Ensure PostgreSQL is fully healthy first:
-```bash
-docker compose up -d pdi-postgres pdi-redis
-# Wait 15 seconds, then:
-docker compose up -d pdi-airflow
-```
-
-### Port conflicts
-If any port is already in use, stop the conflicting service or change the host port in `docker-compose.yml` (left side of `host:container`).
-
-### Models not found when scoring
-Run the training step first:
-```bash
-docker compose run --rm pdi-app python main.py train
-```
-
-### Out of memory errors
-Increase Docker Desktop memory allocation to 14–16 GB, or stop optional services:
-```bash
-docker compose stop pdi-clickhouse pdi-superset
-```
+- Port conflicts
+- Kafka connection issues
+- Cassandra slow startup
+- Python pip build failures on Windows
+- Model training / scoring errors
+- Docker memory issues
+- Groq API errors
+- And more
