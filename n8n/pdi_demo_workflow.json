@@ -1,0 +1,106 @@
+{
+  "name": "PDI - Pre-Delinquency Live Detection",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "seconds", "secondsInterval": 10 }]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Every 10 Seconds",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const customers = [\n  { id: 'DEMO_STRESSED_001', name: 'Rahul Verma', city: 'Delhi', region: 'North', salary: 40000 },\n  { id: 'DEMO_STRESSED_002', name: 'Priya Sharma', city: 'Mumbai', region: 'West', salary: 55000 },\n  { id: 'DEMO_HEALTHY_001', name: 'Arjun Nair', city: 'Bangalore', region: 'South', salary: 120000 },\n  { id: 'DEMO_HEALTHY_002', name: 'Meera Iyer', city: 'Chennai', region: 'South', salary: 65000 },\n  { id: 'DEMO_CRITICAL_001', name: 'Vikram Singh', city: 'Jaipur', region: 'North', salary: 22000 }\n];\n\nconst categories = ['lending_app', 'gambling', 'lottery', 'grocery', 'dining', 'payday_lender', 'cash_advance', 'utility'];\nconst customer = customers[Math.floor(Math.random() * customers.length)];\nconst category = categories[Math.floor(Math.random() * categories.length)];\nconst amount = Math.floor(Math.random() * 20000) + 500;\nconst isStress = ['lending_app','gambling','lottery','payday_lender','cash_advance'].includes(category);\n\nreturn [{\n  json: {\n    customer_id: customer.id,\n    customer_name: customer.name,\n    city: customer.city,\n    region: customer.region,\n    salary: customer.salary,\n    txn_type: 'upi',\n    merchant_category: category,\n    amount: amount,\n    is_stress_category: isStress,\n    direction: 'debit',\n    channel: 'mobile',\n    status: Math.random() > 0.1 ? 'success' : 'failed',\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "generate-txn",
+      "name": "Generate Transaction",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [250, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/score",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ customer_id: $json.customer_id }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "score-customer",
+      "name": "Score Customer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 0],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "" },
+          "conditions": [
+            {
+              "id": "risk-check",
+              "leftValue": "={{ $json.risk_score }}",
+              "rightValue": 0.5,
+              "operator": { "type": "number", "operation": "gte" }
+            }
+          ]
+        }
+      },
+      "id": "check-risk",
+      "name": "Risk >= 0.5?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [750, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const txn = $('Generate Transaction').first().json;\nconst score = $('Score Customer').first().json;\n\nconst riskTier = score.risk_score >= 0.7 ? '🔴 CRITICAL' : '🟡 WATCH';\nconst topDriver = score.shap_drivers && score.shap_drivers.length > 0 \n  ? score.shap_drivers[0].feature \n  : 'unknown';\n\nconst message = `${riskTier} | ${txn.customer_name} (${txn.city})\\n` +\n  `Risk Score: ${(score.risk_score * 100).toFixed(1)}%\\n` +\n  `Top Driver: ${topDriver}\\n` +\n  `Last Txn: ${txn.merchant_category} ₹${txn.amount.toLocaleString()}\\n` +\n  `Recommended: ${score.risk_score >= 0.7 ? 'Escalation Call' : 'Wellness Check-in'}`;\n\nreturn [{ json: { \n  alert_message: message,\n  customer_id: txn.customer_id,\n  customer_name: txn.customer_name,\n  risk_score: score.risk_score,\n  risk_tier: score.risk_score >= 0.7 ? 'critical' : 'watch',\n  top_driver: topDriver,\n  city: txn.city,\n  last_category: txn.merchant_category,\n  last_amount: txn.amount\n}}];"
+      },
+      "id": "format-alert",
+      "name": "Format Alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1000, -100]
+    },
+    {
+      "parameters": {
+        "jsCode": "const txn = $('Generate Transaction').first().json;\nconst score = $('Score Customer').first().json;\n\nreturn [{ json: {\n  status: '✅ STABLE',\n  customer_name: txn.customer_name,\n  risk_score: score.risk_score || 0,\n  last_txn: `${txn.merchant_category} ₹${txn.amount}`\n}}];"
+      },
+      "id": "stable-log",
+      "name": "Log Stable",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1000, 150]
+    }
+  ],
+  "connections": {
+    "Every 10 Seconds": {
+      "main": [[{ "node": "Generate Transaction", "type": "main", "index": 0 }]]
+    },
+    "Generate Transaction": {
+      "main": [[{ "node": "Score Customer", "type": "main", "index": 0 }]]
+    },
+    "Score Customer": {
+      "main": [[{ "node": "Risk >= 0.5?", "type": "main", "index": 0 }]]
+    },
+    "Risk >= 0.5?": {
+      "main": [
+        [{ "node": "Format Alert", "type": "main", "index": 0 }],
+        [{ "node": "Log Stable", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [{ "name": "PDI Demo" }]
+}
