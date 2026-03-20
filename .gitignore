@@ -1,0 +1,53 @@
+# Environment files with secrets
+.env
+.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+venv/
+.venv/
+env/
+
+# Models (large files)
+models/*.joblib
+models/*.pt
+models/*.h5
+*.mlmodel
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+~$*
+
+# MLflow
+mlruns/
+mlflow.db
+
+# Docker volumes (local)
+data/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Logs
+*.log
+logs/
+
+# Temp files
+*.tmp
+*.bak
