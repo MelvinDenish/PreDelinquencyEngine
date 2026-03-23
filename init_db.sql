@@ -191,12 +191,81 @@ INSERT INTO merchant_risk_scores (merchant_category, risk_score, risk_category, 
     ('transfer', 0.15, 'low', 'Peer-to-peer transfers');
 
 -- Indexes for performance
-CREATE INDEX idx_transactions_customer ON transactions(customer_id);
-CREATE INDEX idx_transactions_timestamp ON transactions(timestamp);
-CREATE INDEX idx_transactions_type ON transactions(txn_type);
-CREATE INDEX idx_risk_scores_customer ON risk_scores(customer_id);
-CREATE INDEX idx_risk_scores_scored_at ON risk_scores(scored_at);
-CREATE INDEX idx_interventions_customer ON interventions(customer_id);
-CREATE INDEX idx_interventions_sent_at ON interventions(sent_at);
-CREATE INDEX idx_feedback_customer ON feedback_events(customer_id);
-CREATE INDEX idx_account_balances_customer ON account_balances(customer_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_customer ON transactions(customer_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_timestamp ON transactions(timestamp);
+CREATE INDEX IF NOT EXISTS idx_transactions_type ON transactions(txn_type);
+CREATE INDEX IF NOT EXISTS idx_risk_scores_customer ON risk_scores(customer_id);
+CREATE INDEX IF NOT EXISTS idx_risk_scores_scored_at ON risk_scores(scored_at);
+CREATE INDEX IF NOT EXISTS idx_interventions_customer ON interventions(customer_id);
+CREATE INDEX IF NOT EXISTS idx_interventions_sent_at ON interventions(sent_at);
+CREATE INDEX IF NOT EXISTS idx_feedback_customer ON feedback_events(customer_id);
+CREATE INDEX IF NOT EXISTS idx_account_balances_customer ON account_balances(customer_id);
+
+-- ============================================================
+-- Notification & Assignment Tables (Production Dispatcher)
+-- ============================================================
+
+-- All notification attempts (audit log)
+CREATE TABLE IF NOT EXISTS notifications (
+    id SERIAL PRIMARY KEY,
+    notification_id VARCHAR(50) UNIQUE NOT NULL,
+    customer_id VARCHAR(50) REFERENCES customers(customer_id),
+    channel VARCHAR(30) NOT NULL,     -- sms, email, whatsapp, app_push, rm_call, collector_assignment
+    message_preview TEXT,             -- first 500 chars of message
+    status VARCHAR(20) NOT NULL,      -- delivered, failed, simulated, skipped_cooldown
+    error_message TEXT,
+    metadata JSONB,                   -- twilio_sid, task_id, assignment_id, etc.
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- RM (Relationship Manager) callback tasks
+CREATE TABLE IF NOT EXISTS rm_tasks (
+    id SERIAL PRIMARY KEY,
+    task_id VARCHAR(50) UNIQUE NOT NULL,
+    customer_id VARCHAR(50) REFERENCES customers(customer_id),
+    risk_score DECIMAL(5,4),
+    risk_tier VARCHAR(20),
+    priority VARCHAR(5) NOT NULL,     -- P0, P1, P2
+    call_script TEXT,                 -- GenAI-generated call brief
+    intervention_type VARCHAR(50),
+    shap_drivers JSONB,
+    status VARCHAR(20) DEFAULT 'pending',  -- pending, in_progress, completed, escalated
+    outcome VARCHAR(30),              -- contacted, no_answer, call_back, accepted_offer, declined
+    notes TEXT,                       -- RM notes after call
+    assigned_rm VARCHAR(100),
+    created_at TIMESTAMP DEFAULT NOW(),
+    due_by TIMESTAMP,
+    completed_at TIMESTAMP
+);
+
+-- Collector assignments for severe cases
+CREATE TABLE IF NOT EXISTS collector_assignments (
+    id SERIAL PRIMARY KEY,
+    assignment_id VARCHAR(50) UNIQUE NOT NULL,
+    customer_id VARCHAR(50) REFERENCES customers(customer_id),
+    risk_score DECIMAL(5,4),
+    risk_tier VARCHAR(20),
+    collector_brief TEXT,             -- GenAI-generated case brief
+    restructuring_offer JSONB,        -- {emi_reduction, tenure_ext, payment_holiday, etc.}
+    intervention_type VARCHAR(50),
+    status VARCHAR(20) DEFAULT 'assigned',  -- assigned, contacted, negotiating, resolved, defaulted
+    priority VARCHAR(5) NOT NULL,     -- P0, P1
+    outcome VARCHAR(30),              -- restructured, settled, paid, defaulted, no_response
+    resolution_notes TEXT,
+    assigned_collector VARCHAR(100),
+    created_at TIMESTAMP DEFAULT NOW(),
+    due_by TIMESTAMP,
+    resolved_at TIMESTAMP
+);
+
+-- Notification indexes
+CREATE INDEX IF NOT EXISTS idx_notifications_customer ON notifications(customer_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_channel ON notifications(channel);
+CREATE INDEX IF NOT EXISTS idx_notifications_status ON notifications(status);
+CREATE INDEX IF NOT EXISTS idx_notifications_created ON notifications(created_at);
+CREATE INDEX IF NOT EXISTS idx_rm_tasks_status ON rm_tasks(status);
+CREATE INDEX IF NOT EXISTS idx_rm_tasks_priority ON rm_tasks(priority);
+CREATE INDEX IF NOT EXISTS idx_rm_tasks_customer ON rm_tasks(customer_id);
+CREATE INDEX IF NOT EXISTS idx_collector_status ON collector_assignments(status);
+CREATE INDEX IF NOT EXISTS idx_collector_priority ON collector_assignments(priority);
+CREATE INDEX IF NOT EXISTS idx_collector_customer ON collector_assignments(customer_id);
