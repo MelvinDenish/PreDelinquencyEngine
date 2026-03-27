@@ -9,8 +9,9 @@ import os
 import sys
 import json
 import logging
-from datetime import datetime
-from typing import Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional
+
+import numpy as np
 
 import psycopg2
 import redis as redis_lib
@@ -120,11 +121,11 @@ def determine_intervention(
     customer_id: str,
     risk_score: float,
     risk_tier: str,
-    shap_drivers: list,
+    shap_drivers: List[Dict[str, Any]],
     segment_type: str = "salaried",
     is_cold_start: bool = False,
-    customer_features: dict = None,
-) -> Optional[Dict]:
+    customer_features: Optional[Dict[str, Any]] = None,
+) -> Optional[Dict[str, Any]]:
     """
     Determine the appropriate intervention based on risk tier, SHAP drivers,
     customer segment, and cold-start status.
@@ -175,8 +176,6 @@ def determine_intervention(
     # P9: Uplift gate — suppress interventions for "sure payers" (negative uplift)
     uplift_gate_passed = True
     try:
-        import os
-        import numpy as np
         from ml.uplift_model import UpliftModel
         uplift_path = os.path.join(os.path.dirname(__file__), '..', 'models', 'uplift_model.joblib')
         if os.path.exists(uplift_path) and customer_features:
@@ -209,7 +208,7 @@ def determine_intervention(
     }
 
 
-def save_intervention(intervention: Dict) -> int:
+def save_intervention(intervention: Dict[str, Any]) -> int:
     """Save intervention to PostgreSQL. Returns intervention ID."""
     conn = psycopg2.connect(
         host=PostgresConfig.HOST, port=PostgresConfig.PORT,

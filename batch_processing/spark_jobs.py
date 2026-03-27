@@ -19,6 +19,21 @@ from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.window import Window
 from pyspark.sql.types import (
+    StructType, StructField, StringType, IntegerType,
+    DecimalType, TimestampType, BooleanType, FloatType,
+)
+
+import sys
+import os
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from config.settings import SparkConfig, PostgresConfig  # noqa: E402
+from config.bank_config import BankProfileLoader  # noqa: E402
+
+logger = logging.getLogger(__name__)
+
+JDBC_URL = f"jdbc:postgresql://{PostgresConfig.HOST}:{PostgresConfig.PORT}/{PostgresConfig.DB}"
+JDBC_PROPS = {
     "user": PostgresConfig.USER,
     "password": PostgresConfig.PASSWORD,
     "driver": "org.postgresql.Driver",
@@ -313,7 +328,7 @@ def compute_sip_stoppage(spark: SparkSession):
         F.max("month").alias("last_active_month")
     )
 
-    current_month = datetime.now().strftime("%Y-%m")
+    _current_month = datetime.now().strftime("%Y-%m")
     prev_month = (datetime.now() - timedelta(days=30)).strftime("%Y-%m")
 
     # SIP stopped if had activity in older months but not in last 1 month
@@ -399,7 +414,7 @@ def run_batch_pipeline():
     print("            customer segment classification")
     print("=" * 70)
 
-    bank_profile = BankProfileLoader.get_active_profile()
+    _bank_profile = BankProfileLoader.get_active_profile()  # noqa: F841
     spark = get_spark_session()
 
     try:
