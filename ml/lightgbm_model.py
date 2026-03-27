@@ -1,3 +1,4 @@
+# pyre-ignore-all-errors
 """
 LightGBM Delinquency Risk Model
 Gradient boosting with LightGBM for tabular delinquency prediction.

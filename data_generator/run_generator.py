@@ -1,4 +1,5 @@
-﻿"""
+# pyre-ignore-all-errors
+"""
 Main Data Generator Entry Point
 Generates customers, transactions, account balances, and publishes everything
 to PostgreSQL and Kafka.

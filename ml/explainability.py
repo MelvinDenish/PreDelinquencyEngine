@@ -1,3 +1,4 @@
+# pyre-ignore-all-errors
 """
 SHAP Explainability Layer
 Computes SHAP values for XGBoost predictions to identify

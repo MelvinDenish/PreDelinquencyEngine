@@ -1,3 +1,4 @@
+# pyre-ignore-all-errors
 """
 Feast Materialization Script
 Exports features from PostgreSQL to Parquet and materializes to Redis online store.

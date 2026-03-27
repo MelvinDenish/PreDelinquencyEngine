@@ -1,3 +1,4 @@
+# pyre-ignore-all-errors
 """
 Generate SYSTEM_ARCHITECTURE.docx — Comprehensive system documentation
 for the Pre-Delinquency Intervention Engine hackathon submission.

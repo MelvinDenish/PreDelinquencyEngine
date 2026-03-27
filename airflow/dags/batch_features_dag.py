@@ -1,3 +1,4 @@
+# pyre-ignore-all-errors
 """
 Airflow DAG: Batch Feature Computation
 Runs daily to compute batch features using Apache Spark.

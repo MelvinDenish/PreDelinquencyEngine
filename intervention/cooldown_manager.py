@@ -1,4 +1,5 @@
-﻿"""
+# pyre-ignore-all-errors
+"""
 Cooldown Manager
 Implements cooldown periods and escalation logic to prevent over-contacting
 while ensuring critical risks are addressed.

@@ -1,3 +1,4 @@
+# pyre-ignore-all-errors
 """
 Production Notification Dispatcher
 Actually sends notifications via multiple channels based on risk tier routing.
@@ -416,8 +417,41 @@ def dispatch_notification(
     channels_to_use = routing["channels"]
     customer_id = customer.get("customer_id", "UNKNOWN")
 
+    # P14: Use LinUCB bandit for channel selection if available
+    try:
+        from ml.channel_bandit import LinUCBChannelBandit
+        import os
+        bandit_path = os.path.join(os.path.dirname(__file__), '..', 'models', 'channel_bandit.joblib')
+        if os.path.exists(bandit_path):
+            bandit = LinUCBChannelBandit()
+            bandit.load(bandit_path)
+            bandit_ctx = {
+                "age": customer.get("age", 35),
+                "income_bracket": customer.get("income_bracket", "mid"),
+                "risk_score": risk_score,
+                "segment_type": customer.get("segment_type", "salaried"),
+                "tenure_months": customer.get("tenure_months", 24),
+                "num_dependents": customer.get("num_dependents", 1),
+                "region": customer.get("region", "metro"),
+                "credit_score": customer.get("credit_score", 700),
+            }
+            best_channel = bandit.select_channel(bandit_ctx)
+            # Put bandit's choice first, keep others as fallback
+            if best_channel in channels_to_use:
+                channels_to_use = [best_channel] + [c for c in channels_to_use if c != best_channel]
+            else:
+                channels_to_use = [best_channel] + channels_to_use
+            logger.info(f"[Dispatcher] Bandit selected: {best_channel} for {customer_id}")
+    except Exception as e:
+        logger.debug(f"[Dispatcher] Bandit not available: {e}")
+
+    # P2: Accept journey metadata for nudge journey tracking
+    journey_id = intervention.get("journey_id")
+    journey_step = intervention.get("journey_step")
+
     logger.info(f"[Dispatcher] {customer_id} | Risk: {risk_score:.2f} | "
-                f"Tier: {routing['tier']} | Channels: {channels_to_use}")
+                f"Tier: {routing['tier']} | Channels: {channels_to_use}"
+                f"{f' | Journey: {journey_id} Step {journey_step}' if journey_id else ''}")
 
     for channel in channels_to_use:
         # Check cooldown

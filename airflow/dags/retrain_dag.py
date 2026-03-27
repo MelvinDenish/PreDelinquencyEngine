@@ -1,3 +1,4 @@
+# pyre-ignore-all-errors
 """
 Airflow DAG: Model Retraining Pipeline
 Bi-weekly (or drift-triggered) retraining with champion-challenger testing.

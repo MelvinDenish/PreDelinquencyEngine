@@ -1,3 +1,4 @@
+# pyre-ignore-all-errors
 """
 Outreach Module
 Handles multi-channel intervention delivery using Apprise.

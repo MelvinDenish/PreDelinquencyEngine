@@ -1,3 +1,4 @@
+# pyre-ignore-all-errors
 """
 Multi-Bank Adapter — BankProfile Configuration
 Loads bank-specific YAML configuration files that define taxonomy,

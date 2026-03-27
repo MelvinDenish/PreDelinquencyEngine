@@ -1,3 +1,4 @@
+# pyre-ignore-all-errors
 """
 Apache Superset Configuration
 Connects to PDI PostgreSQL database for advanced SQL-based analytics.

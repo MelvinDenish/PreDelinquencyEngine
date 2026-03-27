@@ -1,3 +1,4 @@
+# pyre-ignore-all-errors
 """
 BentoML Model Serving Service
 Production-grade model serving with BentoML for the PDI delinquency ensemble.

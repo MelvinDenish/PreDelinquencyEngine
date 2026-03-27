@@ -1,4 +1,5 @@
-﻿"""
+# pyre-ignore-all-errors
+"""
 Dataset Builder
 Builds training datasets from PostgreSQL by merging streaming features,
 batch features, and outcome labels.

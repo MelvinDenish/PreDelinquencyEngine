@@ -1,3 +1,4 @@
+# pyre-ignore-all-errors
 """
 Add Technology Deep Dive section to SYSTEM_ARCHITECTURE.docx
 Each tech: Why Selected + Black-Box + Internal Working

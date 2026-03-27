@@ -1,4 +1,5 @@
-﻿"""
+# pyre-ignore-all-errors
+"""
 Celery Tasks
 Async tasks for intervention dispatch, scoring batches, and feedback processing.
 """

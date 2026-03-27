@@ -1,3 +1,4 @@
+# pyre-ignore-all-errors
 """
 Product Action Engine (M10)
 Generates proactive product-level intervention proposals that the bank

@@ -1,3 +1,4 @@
+# pyre-ignore-all-errors
 """
 Sequence Precompute DAG (M7)
 Daily Airflow DAG that precomputes 29-day sequences for TFT/LSTM

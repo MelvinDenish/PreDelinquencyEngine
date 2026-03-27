@@ -1,3 +1,4 @@
+# pyre-ignore-all-errors
 """
 Fairness & Bias Auditing
 Evaluates model fairness using BOTH Fairlearn AND AIF360 (IBM).

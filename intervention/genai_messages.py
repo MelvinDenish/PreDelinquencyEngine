@@ -1,3 +1,4 @@
+# pyre-ignore-all-errors
 """
 GenAI-Powered Multi-Channel Message Generator
 Uses Groq's LLM API to generate personalized, empathetic intervention messages

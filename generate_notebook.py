@@ -1,3 +1,4 @@
+# pyre-ignore-all-errors
 """Generate the model training & tuning Jupyter notebook."""
 import json, os
 

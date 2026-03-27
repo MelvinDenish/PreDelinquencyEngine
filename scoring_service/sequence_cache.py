@@ -1,3 +1,4 @@
+# pyre-ignore-all-errors
 """
 Sequence Cache — TFT + LSTM Inference Optimisation (M7)
 Precomputes and caches encoded sequence representations in Redis

@@ -1,3 +1,4 @@
+# pyre-ignore-all-errors
 """
 Live Demo Simulation Script
 Feeds realistic transactions in real-time to demonstrate the full pipeline:

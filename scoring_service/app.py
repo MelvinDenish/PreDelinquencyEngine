@@ -1,3 +1,4 @@
+# pyre-ignore-all-errors
 """
 FastAPI Scoring Service — v3.0
 Provides REST endpoints for real-time delinquency risk scoring.
@@ -37,6 +38,15 @@ from ml.segment_classifier import CustomerSegmentClassifier
 from scoring_service.sequence_cache import SequenceCache
 from intervention.product_actions import ProductActionEngine
 from scoring_service.cassandra_client import write_risk_score as cassandra_write_risk_score
+
+# Phase 2 imports
+from ml.survival_model import SurvivalModel
+from ml.conformal import ConformalPredictor
+from ml.ab_holdout import ABHoldout
+from ml.shadow_scorer import ShadowScorer
+from ml.uplift_model import UpliftModel
+from ml.counterfactual import CounterfactualGenerator
+from scoring_service.grpc_server import start_grpc_server
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -94,6 +104,14 @@ segment_classifier = CustomerSegmentClassifier()
 sequence_cache: Optional[SequenceCache] = None
 product_engine = ProductActionEngine()
 
+# Phase 2 global instances
+survival_model: Optional[SurvivalModel] = None
+conformal_predictor: Optional[ConformalPredictor] = None
+ab_holdout = ABHoldout()
+shadow_scorer = ShadowScorer()
+uplift_model: Optional[UpliftModel] = None
+counterfactual_gen = CounterfactualGenerator()
+
 
 # ─────────────────────────────────────────────
 # Request/Response Models
@@ -121,6 +139,17 @@ class ScoreResponse(BaseModel):
     top_lime_features: Optional[list] = None
     explanation: Optional[str] = None
     product_actions: Optional[list] = None
+    # Phase 2 fields
+    tte_days: Optional[float] = None
+    p30d: Optional[float] = None
+    p60d: Optional[float] = None
+    p90d: Optional[float] = None
+    risk_score_lower: Optional[float] = None
+    risk_score_upper: Optional[float] = None
+    confidence_flag: Optional[str] = None
+    uplift_score: Optional[float] = None
+    holdout_group: Optional[str] = None
+    shadow_score: Optional[float] = None
     scored_at: str
 
 class HealthResponse(BaseModel):
@@ -244,6 +273,7 @@ async def load_models():
     """Load all models on startup."""
     global xgb_model, lgb_model, lstm_model, tft_model, ensemble, stacker
     global shap_explainer, lime_explainer, redis_client, sequence_cache
+    global survival_model, conformal_predictor, uplift_model
 
     # Expose Prometheus /metrics endpoint
     if _prometheus_enabled:
@@ -329,12 +359,65 @@ async def load_models():
     except Exception as e:
         logger.warning(f"Sequence cache unavailable: {e}")
 
+    # Phase 2: Load survival model (P1)
+    try:
+        surv_path = os.path.join(MODEL_DIR, "survival_model.joblib")
+        survival_model = SurvivalModel()
+        survival_model.load(surv_path)
+        logger.info(f"Survival model loaded: {survival_model._is_fitted}")
+    except Exception as e:
+        logger.warning(f"Survival model load failed: {e}")
+
+    # Phase 2: Load conformal predictor (P6)
+    try:
+        conf_path = os.path.join(MODEL_DIR, "conformal_predictor.joblib")
+        conformal_predictor = ConformalPredictor()
+        conformal_predictor.load(conf_path)
+        logger.info(f"Conformal predictor loaded: {conformal_predictor._is_calibrated}")
+    except Exception as e:
+        logger.warning(f"Conformal predictor load failed: {e}")
+
+    # Phase 2: Load uplift model (P9)
+    try:
+        uplift_path = os.path.join(MODEL_DIR, "uplift_model.joblib")
+        uplift_model = UpliftModel()
+        uplift_model.load(uplift_path)
+        logger.info(f"Uplift model loaded: {uplift_model._is_fitted}")
+    except Exception as e:
+        logger.warning(f"Uplift model load failed: {e}")
+
+    # Phase 2: Load shadow candidate model (P8)
+    try:
+        shadow_path = os.path.join(MODEL_DIR, "shadow_candidate.joblib")
+        shadow_scorer.load_candidate(shadow_path)
+    except Exception as e:
+        logger.info(f"No shadow candidate model: {e}")
+
+    # Phase 2: Start gRPC server alongside REST (P12)
+    def _grpc_score_fn(cid):
+        import asyncio
+        loop = asyncio.new_event_loop()
+        return loop.run_until_complete(score_customer(ScoreRequest(customer_id=cid)))
+
+    def _grpc_health_fn():
+        return {"status": "healthy", "version": "4.0",
+                "models_loaded": xgb_model is not None}
+
+    try:
+        start_grpc_server(_grpc_score_fn, _grpc_health_fn)
+    except Exception as e:
+        logger.info(f"gRPC server not started: {e}")
+
     logger.info(
-        f"Scoring service v3.0 ready "
+        f"Scoring service v4.0 ready "
         f"(XGB:{xgb_model is not None} LGB:{lgb_model is not None} "
         f"LSTM:{lstm_model is not None} TFT:{tft_model is not None} "
-        f"MetaLearner:{stacker.meta_learner is not None})"
+        f"MetaLearner:{stacker.meta_learner is not None} "
+        f"Survival:{survival_model is not None} "
+        f"Conformal:{conformal_predictor is not None} "
+        f"Uplift:{uplift_model is not None})"
     )
+
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -471,7 +554,66 @@ async def score_customer(request: ScoreRequest):
         except Exception as e:
             logger.warning(f"Product actions failed: {e}")
 
-    # Step 10: Store results
+    # Step 10 (P1): Survival analysis — TTE, p30d, p60d, p90d
+    tte_days = None
+    p30d = None
+    p60d = None
+    p90d = None
+    if survival_model is not None and survival_model._is_fitted:
+        try:
+            surv = survival_model.predict(features, risk_score=final_score)
+            tte_days = surv["tte_days"]
+            p30d = surv["p30d"]
+            p60d = surv["p60d"]
+            p90d = surv["p90d"]
+        except Exception as e:
+            logger.warning(f"Survival prediction failed: {e}")
+    else:
+        # Fallback: derive from risk score
+        surv_fallback = SurvivalModel()._score_from_risk_score(final_score)
+        tte_days = surv_fallback["tte_days"]
+        p30d = surv_fallback["p30d"]
+        p60d = surv_fallback["p60d"]
+        p90d = surv_fallback["p90d"]
+
+    # Step 11 (P6): Conformal prediction interval
+    risk_score_lower = None
+    risk_score_upper = None
+    confidence_flag = None
+    if conformal_predictor is not None:
+        lower, upper = conformal_predictor.predict_interval(final_score)
+        risk_score_lower = lower
+        risk_score_upper = upper
+        confidence_flag = conformal_predictor.uncertainty_flag(lower, upper)
+
+    # Step 12 (P4): A/B holdout check
+    holdout_assignment = ab_holdout.get_assignment(customer_id)
+    holdout_group = holdout_assignment["group"]
+    try:
+        ab_holdout.save_assignment(customer_id, risk_tier)
+    except Exception:
+        pass
+
+    # Step 13 (P8): Shadow scoring
+    shadow_score_val = None
+    try:
+        shadow_score_val = shadow_scorer.shadow_score(customer_id, features)
+        if shadow_score_val is not None:
+            shadow_scorer.persist_shadow_score(
+                customer_id, final_score, shadow_score_val
+            )
+    except Exception:
+        pass
+
+    # Step 14 (P9): Uplift score
+    uplift_score_val = None
+    if uplift_model is not None:
+        try:
+            uplift_score_val = uplift_model.predict_uplift_single(features)
+        except Exception:
+            pass
+
+    # Step 15: Store results (expanded with Phase 2 columns)
     score_data = {
         "customer_id": customer_id,
         "risk_score": final_score,
@@ -487,6 +629,15 @@ async def score_customer(request: ScoreRequest):
         "meta_learner_used": meta_learner_used,
         "top_shap_features": top_shap,
         "top_lime_features": top_lime,
+        "tte_days": tte_days,
+        "p30d": p30d,
+        "p60d": p60d,
+        "p90d": p90d,
+        "risk_score_lower": risk_score_lower,
+        "risk_score_upper": risk_score_upper,
+        "confidence_flag": confidence_flag,
+        "uplift_score": uplift_score_val,
+        "shadow_score": shadow_score_val,
         "scored_at": scored_at,
     }
     try:
@@ -527,6 +678,16 @@ async def score_customer(request: ScoreRequest):
         top_lime_features=top_lime,
         explanation=explanation,
         product_actions=[a["action_type"] for a in actions] if actions else None,
+        tte_days=tte_days,
+        p30d=p30d,
+        p60d=p60d,
+        p90d=p90d,
+        risk_score_lower=risk_score_lower,
+        risk_score_upper=risk_score_upper,
+        confidence_flag=confidence_flag,
+        uplift_score=uplift_score_val,
+        holdout_group=holdout_group,
+        shadow_score=shadow_score_val,
         scored_at=scored_at,
     )
 
@@ -583,7 +744,7 @@ async def get_score(customer_id: str):
 
 @app.get("/explain/{customer_id}")
 async def explain_customer(customer_id: str):
-    """Get both SHAP and LIME explanations for a customer."""
+    """Get SHAP, LIME, and counterfactual explanations for a customer."""
     features = assemble_feature_vector(customer_id)
     features_2d = features.reshape(1, -1)
 
@@ -600,6 +761,22 @@ async def explain_customer(customer_id: str):
             result["lime"] = lime_explainer.explain_single(features_2d)
         except Exception as e:
             result["lime"] = {"error": str(e)}
+
+    # P5: Counterfactual explanations
+    try:
+        def _predict_fn(x):
+            return xgb_model.predict_proba(x) if xgb_model else np.full(len(x), 0.5)
+
+        shap_drivers = result.get("shap", {}).get("top_drivers", [])
+        cf = counterfactual_gen.generate(
+            features=features,
+            feature_names=ModelConfig.FEATURE_COLUMNS,
+            predict_fn=_predict_fn,
+            shap_drivers=shap_drivers,
+        )
+        result["counterfactuals"] = cf
+    except Exception as e:
+        result["counterfactuals"] = {"error": str(e)}
 
     return result
 

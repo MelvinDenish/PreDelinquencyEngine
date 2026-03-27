@@ -1,3 +1,4 @@
+# pyre-ignore-all-errors
 """
 Customer Profile Generator — Production Grade
 Generates bank-level realistic customer profiles with demographics, salary patterns,

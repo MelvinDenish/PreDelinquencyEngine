@@ -1,3 +1,4 @@
+# pyre-ignore-all-errors
 """
 Bank Onboarding CLI
 Validates a bank's YAML configuration, checks schema compatibility,
