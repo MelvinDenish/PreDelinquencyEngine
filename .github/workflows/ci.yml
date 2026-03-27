@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 env:
-  PYTHON_VERSION: "3.10"
+  PYTHON_VERSION: "3.11"
   DOCKER_IMAGE: pdi-engine
 
 jobs:
@@ -68,7 +68,7 @@ jobs:
           # Intervention & Dashboard
           pip install celery apprise plotly dash dash-bootstrap-components
           # Monitoring & Fairness
-          pip install evidently fairlearn prometheus-fastapi-instrumentator prometheus-client
+          pip install evidently==0.7.17 fairlearn prometheus-fastapi-instrumentator prometheus-client
           # Packages that need special handling (may fail in CI — that's OK, they run in Docker)
           pip install lime || echo "WARN: lime install failed (optional)"
           pip install aif360 || echo "WARN: aif360 install failed (optional)"
@@ -144,6 +144,7 @@ jobs:
         with:
           context: .
           push: false
+          load: true
           tags: ${{ env.DOCKER_IMAGE }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
