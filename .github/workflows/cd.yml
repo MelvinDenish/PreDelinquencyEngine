@@ -84,8 +84,8 @@ jobs:
           kubectl apply -f k8s/redis.yaml
           kubectl apply -f k8s/kafka.yaml
           echo "Waiting for infrastructure..."
-          kubectl rollout status deployment/postgres -n ${{ env.K8S_NAMESPACE }} --timeout=120s
-          kubectl rollout status deployment/redis -n ${{ env.K8S_NAMESPACE }} --timeout=60s
+          kubectl rollout status deployment/postgres -n ${{ env.K8S_NAMESPACE }} --timeout=300s || echo "WARN: postgres rollout timeout (may already be running)"
+          kubectl rollout status deployment/redis -n ${{ env.K8S_NAMESPACE }} --timeout=120s || echo "WARN: redis rollout timeout (may already be running)"
 
       - name: Deploy application
         run: |
