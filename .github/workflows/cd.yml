@@ -22,36 +22,19 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Login to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-      - name: Login to Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.DOCKER_REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build Docker image
+        run: |
+          IMAGE_TAG="${{ env.DOCKER_REGISTRY }}/${{ github.repository }}/${{ env.DOCKER_IMAGE }}"
+          docker build -t ${IMAGE_TAG}:${{ github.sha }} -t ${IMAGE_TAG}:latest .
 
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.DOCKER_REGISTRY }}/${{ github.repository }}/${{ env.DOCKER_IMAGE }}
-          tags: |
-            type=sha,prefix=
-            type=ref,event=branch
-            type=semver,pattern={{version}}
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: Build and push
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - name: Push Docker image
+        run: |
+          IMAGE_TAG="${{ env.DOCKER_REGISTRY }}/${{ github.repository }}/${{ env.DOCKER_IMAGE }}"
+          docker push ${IMAGE_TAG}:${{ github.sha }}
+          docker push ${IMAGE_TAG}:latest
 
   deploy-to-k8s:
     name: Deploy to Kubernetes
@@ -89,15 +72,12 @@ jobs:
 
       - name: Deploy application
         run: |
-          # Build the GHCR image reference
-          export IMAGE=${{ env.DOCKER_REGISTRY }}/${{ github.repository }}/${{ env.DOCKER_IMAGE }}:${{ github.sha }}
+          IMAGE="${{ env.DOCKER_REGISTRY }}/${{ github.repository }}/${{ env.DOCKER_IMAGE }}:${{ github.sha }}"
 
-          # Replace ACR image references in K8s manifests
+          # Replace image references in K8s manifests
           sed -i "s|pdiengineacr.azurecr.io/pdi-engine:latest|${IMAGE}|g" k8s/scoring-service.yaml
           sed -i "s|pdiengineacr.azurecr.io/pdi-engine:latest|${IMAGE}|g" k8s/dashboard.yaml
           sed -i "s|pdiengineacr.azurecr.io/pdi-engine:latest|${IMAGE}|g" k8s/celery-worker.yaml
-
-          # Also handle the generic pattern in case manifests were reset
           sed -i "s|pdi-engine:latest|${IMAGE}|g" k8s/scoring-service.yaml
           sed -i "s|pdi-engine:latest|${IMAGE}|g" k8s/dashboard.yaml
           sed -i "s|pdi-engine:latest|${IMAGE}|g" k8s/celery-worker.yaml
