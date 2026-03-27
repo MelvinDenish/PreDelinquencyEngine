@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pre-Delinquency Intervention Engine | Barclays</title>
+    <meta name="description" content="AI-powered early warning system for retail banking delinquency prediction">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- ═══════════════ NAVIGATION ═══════════════ -->
+    <nav id="navbar">
+        <div class="nav-brand">
+            <div class="logo-icon">
+                <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+                    <circle cx="14" cy="14" r="12" stroke="url(#grad)" stroke-width="2.5"/>
+                    <path d="M9 14l3 3 7-7" stroke="url(#grad)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    <defs><linearGradient id="grad" x1="0" y1="0" x2="28" y2="28"><stop stop-color="#00D4FF"/><stop offset="1" stop-color="#7B2FFF"/></linearGradient></defs>
+                </svg>
+            </div>
+            <span>PDI Engine</span>
+        </div>
+        <div class="nav-links">
+            <a href="#hero" class="active">Home</a>
+            <a href="#problem">Problem</a>
+            <a href="#architecture">Architecture</a>
+            <a href="#pipeline">Pipeline</a>
+            <a href="#models">ML Models</a>
+            <a href="#demo-live">Live Demo</a>
+            <a href="#personas">Personas</a>
+            <a href="#tech-stack">Tech Stack</a>
+        </div>
+    </nav>
+
+    <!-- ═══════════════ HERO ═══════════════ -->
+    <section id="hero">
+        <div class="hero-bg-particles" id="particles"></div>
+        <div class="hero-content">
+            <div class="hero-badge">🏦 Barclays Hackathon 2026</div>
+            <h1 class="hero-title">
+                Pre-Delinquency<br>
+                <span class="gradient-text">Intervention Engine</span>
+            </h1>
+            <p class="hero-subtitle">
+                AI-powered early warning system that detects financial stress <em>before</em> customers miss payments — 
+                combining real-time streaming analytics, ensemble ML models, and GenAI-driven empathetic interventions.
+            </p>
+            <div class="hero-stats">
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-auc">0.93</div>
+                    <div class="stat-label">Ensemble AUC-ROC</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">3</div>
+                    <div class="stat-label">ML Models in Ensemble</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">28</div>
+                    <div class="stat-label">Behavioral Features</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">&lt;100ms</div>
+                    <div class="stat-label">Scoring Latency</div>
+                </div>
+            </div>
+            <div class="hero-cta">
+                <a href="#demo-live" class="btn btn-primary">▶ Live Demo</a>
+                <a href="#architecture" class="btn btn-secondary">View Architecture</a>
+            </div>
+        </div>
+        <div class="scroll-indicator">
+            <div class="mouse"><div class="wheel"></div></div>
+            <span>Scroll to explore</span>
+        </div>
+    </section>
+
+    <!-- ═══════════════ PROBLEM STATEMENT ═══════════════ -->
+    <section id="problem">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-tag">The Challenge</span>
+                <h2>₹1.8 Lakh Crore Problem</h2>
+                <p class="section-desc">India's retail NPAs crossed ₹1.8 lakh crore in FY2024. Traditional collections start <em>after</em> default — we intervene <em>before</em>.</p>
+            </div>
+            <div class="problem-grid">
+                <div class="problem-card problem-before">
+                    <div class="card-icon">🔴</div>
+                    <h3>Traditional Approach</h3>
+                    <ul>
+                        <li>Reactive — acts after missed payment</li>
+                        <li>Generic "Pay now" threats</li>
+                        <li>No context about WHY customer is struggling</li>
+                        <li>Damages relationship (40% churn rate)</li>
+                        <li>Costly recovery (₹15,000+ per account)</li>
+                    </ul>
+                </div>
+                <div class="problem-arrow">
+                    <svg width="60" height="60" viewBox="0 0 60 60"><path d="M10 30h35M35 20l10 10-10 10" stroke="#00D4FF" stroke-width="3" fill="none" stroke-linecap="round"/></svg>
+                </div>
+                <div class="problem-card problem-after">
+                    <div class="card-icon">🟢</div>
+                    <h3>Our PDI Engine</h3>
+                    <ul>
+                        <li>Proactive — detects stress 30-90 days early</li>
+                        <li>GenAI personalized, empathetic messages</li>
+                        <li>SHAP explains exactly WHY (salary delay, medical…)</li>
+                        <li>Preserves relationship (EMI restructuring offers)</li>
+                        <li>Saves ₹8,000+ per intervention</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══════════════ ARCHITECTURE ═══════════════ -->
+    <section id="architecture">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-tag">System Design</span>
+                <h2>Lambda Architecture</h2>
+                <p class="section-desc">Real-time + batch processing with microservices deployed on Azure Kubernetes Service</p>
+            </div>
+            <div class="arch-flow">
+                <div class="arch-layer" data-layer="ingestion">
+                    <h4>Data Ingestion</h4>
+                    <div class="arch-nodes">
+                        <div class="arch-node pulse-node" data-tooltip="Core Banking System (CBS) transactions">
+                            <div class="node-icon">🏦</div>
+                            <span>CBS Transactions</span>
+                        </div>
+                        <div class="arch-node pulse-node" data-tooltip="UPI, NEFT, ATM withdrawals, bill payments">
+                            <div class="node-icon">💳</div>
+                            <span>Payment Events</span>
+                        </div>
+                        <div class="arch-node pulse-node" data-tooltip="Credit bureau updates, salary credits">
+                            <div class="node-icon">📊</div>
+                            <span>External Data</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="arch-arrow-down"><div class="arrow-line"></div></div>
+                <div class="arch-layer" data-layer="streaming">
+                    <h4>Message Broker</h4>
+                    <div class="arch-nodes">
+                        <div class="arch-node kafka-node">
+                            <div class="node-icon">📨</div>
+                            <span>Apache Kafka</span>
+                            <div class="node-detail">6 Topics • Real-time streaming</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="arch-arrow-down"><div class="arrow-line"></div></div>
+                <div class="arch-layer" data-layer="processing">
+                    <h4>Dual Processing</h4>
+                    <div class="arch-nodes">
+                        <div class="arch-node speed-node">
+                            <div class="node-icon">⚡</div>
+                            <span>Apache Flink</span>
+                            <div class="node-detail">Speed Layer — 7-day rolling windows</div>
+                        </div>
+                        <div class="arch-node batch-node">
+                            <div class="node-icon">📦</div>
+                            <span>Apache Spark</span>
+                            <div class="node-detail">Batch Layer — 30-day aggregates</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="arch-arrow-down"><div class="arrow-line"></div></div>
+                <div class="arch-layer" data-layer="serving">
+                    <h4>ML Serving</h4>
+                    <div class="arch-nodes">
+                        <div class="arch-node ml-node">
+                            <div class="node-icon">🧠</div>
+                            <span>Ensemble Scorer</span>
+                            <div class="node-detail">XGBoost (0.40) + LightGBM (0.30) + LSTM (0.30)</div>
+                        </div>
+                        <div class="arch-node explain-node">
+                            <div class="node-icon">🔍</div>
+                            <span>Explainability</span>
+                            <div class="node-detail">SHAP + LIME • Fairlearn + AIF360</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="arch-arrow-down"><div class="arrow-line"></div></div>
+                <div class="arch-layer" data-layer="action">
+                    <h4>Intervention</h4>
+                    <div class="arch-nodes">
+                        <div class="arch-node genai-node">
+                            <div class="node-icon">✨</div>
+                            <span>Groq GenAI</span>
+                            <div class="node-detail">Empathetic SMS/Email/WhatsApp • Call Scripts</div>
+                        </div>
+                        <div class="arch-node dashboard-node">
+                            <div class="node-icon">📈</div>
+                            <span>RM Dashboard</span>
+                            <div class="node-detail">Plotly Dash • Real-time risk heatmap</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══════════════ DATA PIPELINE ═══════════════ -->
+    <section id="pipeline">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-tag">End-to-End Flow</span>
+                <h2>How It Works</h2>
+                <p class="section-desc">From raw transaction to empathetic intervention in under 5 seconds</p>
+            </div>
+            <div class="pipeline-steps">
+                <div class="pipe-step" data-step="1">
+                    <div class="step-number">01</div>
+                    <div class="step-content">
+                        <h3>Transaction Ingested</h3>
+                        <p>Customer makes an ATM withdrawal at 2 AM, 3rd time this week. Transaction hits Kafka topic <code>transactions</code>.</p>
+                        <div class="step-code">
+                            <pre><code>{"customer_id": "CUST-4821", "type": "ATM_WITHDRAWAL", "amount": 8500, "time": "02:14 AM", "location": "Mumbai"}</code></pre>
+                        </div>
+                    </div>
+                </div>
+                <div class="pipe-step" data-step="2">
+                    <div class="step-number">02</div>
+                    <div class="step-content">
+                        <h3>Feature Engineering</h3>
+                        <p>Flink computes rolling aggregates in real-time: <code>atm_withdrawals_count_7d</code> jumps to 8 (normal: 2). Spark batch adds 30-day trends.</p>
+                        <div class="feature-chips">
+                            <span class="chip chip-high">atm_withdrawals_7d: 8 ↑</span>
+                            <span class="chip chip-warn">discretionary_spend_7d: ₹42K ↑</span>
+                            <span class="chip chip-warn">lending_app_txns_7d: 3 ↑</span>
+                            <span class="chip chip-ok">salary_delay: 0 days</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="pipe-step" data-step="3">
+                    <div class="step-number">03</div>
+                    <div class="step-content">
+                        <h3>Ensemble Scoring</h3>
+                        <p>28 features fed to XGBoost + LightGBM (tabular) + LSTM (temporal sequence). Weighted ensemble produces risk score.</p>
+                        <div class="score-viz">
+                            <div class="score-bar-container">
+                                <div class="score-bar" id="demo-score-bar" style="width: 78%">
+                                    <span>0.78</span>
+                                </div>
+                            </div>
+                            <div class="score-breakdown">
+                                <div class="model-contrib"><span>XGBoost</span><div class="mini-bar" style="width:82%"><span>0.82</span></div></div>
+                                <div class="model-contrib"><span>LightGBM</span><div class="mini-bar" style="width:75%"><span>0.75</span></div></div>
+                                <div class="model-contrib"><span>LSTM</span><div class="mini-bar" style="width:74%"><span>0.74</span></div></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="pipe-step" data-step="4">
+                    <div class="step-number">04</div>
+                    <div class="step-content">
+                        <h3>SHAP Explanation</h3>
+                        <p>TreeSHAP reveals <em>why</em> this customer is risky. Top drivers surface automatically.</p>
+                        <div class="shap-waterfall">
+                            <div class="shap-feature shap-positive" style="--width: 90%"><span class="shap-name">atm_withdrawals_7d</span><span class="shap-val">+0.18</span></div>
+                            <div class="shap-feature shap-positive" style="--width: 75%"><span class="shap-name">lending_app_txns_7d</span><span class="shap-val">+0.14</span></div>
+                            <div class="shap-feature shap-positive" style="--width: 55%"><span class="shap-name">discretionary_spend_7d</span><span class="shap-val">+0.09</span></div>
+                            <div class="shap-feature shap-negative" style="--width: 40%"><span class="shap-name">credit_score</span><span class="shap-val">−0.06</span></div>
+                            <div class="shap-feature shap-negative" style="--width: 30%"><span class="shap-name">tenure_months</span><span class="shap-val">−0.04</span></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="pipe-step" data-step="5">
+                    <div class="step-number">05</div>
+                    <div class="step-content">
+                        <h3>GenAI Intervention</h3>
+                        <p>Groq LLM generates an empathetic, personalized message based on the SHAP explanation — not a generic "pay now" threat.</p>
+                        <div class="intervention-message">
+                            <div class="msg-header">
+                                <span class="msg-channel">📱 SMS</span>
+                                <span class="msg-tier tier-critical">● Critical Risk</span>
+                            </div>
+                            <div class="msg-body">
+                                <p>"Hi Sarah, we noticed some unusual activity on your account recently. At Barclays, your financial wellbeing matters to us. Would you like to explore our flexible payment options or speak with a dedicated relationship manager? Reply HELP or call 1800-XXX-XXXX."</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══════════════ ML MODELS ═══════════════ -->
+    <section id="models">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-tag">Machine Learning</span>
+                <h2>3-Model Ensemble</h2>
+                <p class="section-desc">Each model captures different patterns. Together they achieve 0.93 AUC-ROC.</p>
+            </div>
+            <div class="models-grid">
+                <div class="model-card" data-model="xgboost">
+                    <div class="model-weight">40%</div>
+                    <h3>XGBoost</h3>
+                    <div class="model-type">Gradient Boosted Trees</div>
+                    <div class="model-specs">
+                        <div class="spec"><span>Depth</span><span>6</span></div>
+                        <div class="spec"><span>Trees</span><span>300</span></div>
+                        <div class="spec"><span>LR</span><span>0.05</span></div>
+                        <div class="spec"><span>AUC</span><span class="highlight">0.88</span></div>
+                    </div>
+                    <p class="model-why"><strong>Why?</strong> Industry standard for credit risk. Native missing value handling. Exact SHAP via TreeSHAP for regulatory explainability.</p>
+                </div>
+                <div class="model-card" data-model="lightgbm">
+                    <div class="model-weight">30%</div>
+                    <h3>LightGBM</h3>
+                    <div class="model-type">Leaf-wise Boosting</div>
+                    <div class="model-specs">
+                        <div class="spec"><span>Leaves</span><span>63</span></div>
+                        <div class="spec"><span>Rounds</span><span>500</span></div>
+                        <div class="spec"><span>LR</span><span>0.05</span></div>
+                        <div class="spec"><span>AUC</span><span class="highlight">0.87</span></div>
+                    </div>
+                    <p class="model-why"><strong>Why?</strong> Leaf-wise growth captures different splits than XGBoost's level-wise. Adds diversity to the ensemble.</p>
+                </div>
+                <div class="model-card" data-model="lstm">
+                    <div class="model-weight">30%</div>
+                    <h3>LSTM + Attention</h3>
+                    <div class="model-type">Recurrent Neural Network</div>
+                    <div class="model-specs">
+                        <div class="spec"><span>Hidden</span><span>64</span></div>
+                        <div class="spec"><span>Layers</span><span>2</span></div>
+                        <div class="spec"><span>Dropout</span><span>0.3</span></div>
+                        <div class="spec"><span>AUC</span><span class="highlight">0.82</span></div>
+                    </div>
+                    <p class="model-why"><strong>Why?</strong> Sees 30-day sequences — detects <em>gradual deterioration</em> patterns invisible to tabular models (creeping salary delays, progressive spending changes).</p>
+                </div>
+            </div>
+            <div class="ensemble-formula">
+                <div class="formula-box">
+                    <code>ensemble_score = 0.40 × XGBoost + 0.30 × LightGBM + 0.30 × LSTM</code>
+                </div>
+                <div class="tier-legend">
+                    <span class="tier tier-critical">≥ 0.70 Critical</span>
+                    <span class="tier tier-watch">0.50 – 0.69 Watch</span>
+                    <span class="tier tier-stable">&lt; 0.50 Stable</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══════════════ LIVE DEMO ═══════════════ -->
+    <section id="demo-live">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-tag">Interactive</span>
+                <h2>Live Scoring Demo</h2>
+                <p class="section-desc">See the engine score a customer in real-time</p>
+            </div>
+            <div class="demo-panel">
+                <div class="demo-input">
+                    <h3>Customer Profile</h3>
+                    <div class="input-grid">
+                        <div class="input-group">
+                            <label>Customer Name</label>
+                            <select id="demo-customer">
+                                <option value="sarah">Sarah Menon (Marketing Exec, 32)</option>
+                                <option value="rajesh">Rajesh Kumar (IT Manager, 45)</option>
+                                <option value="priya">Priya Sharma (Teacher, 28)</option>
+                                <option value="amit">Amit Patel (Business Owner, 52)</option>
+                            </select>
+                        </div>
+                        <div class="input-group">
+                            <label>Life Event Simulation</label>
+                            <select id="demo-event">
+                                <option value="medical">🏥 Medical Emergency</option>
+                                <option value="jobloss">💼 Job Loss</option>
+                                <option value="wedding">💒 Wedding Expense</option>
+                                <option value="none">✅ No Stress Event</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button class="btn btn-primary btn-large" id="btn-score" onclick="runDemoScoring()">
+                        <span class="btn-icon">🧠</span> Score Customer
+                    </button>
+                </div>
+                <div class="demo-output" id="demo-output">
+                    <div class="output-placeholder">
+                        <div class="placeholder-icon">⚡</div>
+                        <p>Select a customer and click "Score Customer" to see the ensemble in action</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══════════════ PERSONAS ═══════════════ -->
+    <section id="personas">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-tag">User Stories</span>
+                <h2>Who Uses This System?</h2>
+            </div>
+            <div class="persona-tabs">
+                <button class="persona-tab active" onclick="showPersona('admin')">🛠️ System Admin</button>
+                <button class="persona-tab" onclick="showPersona('customer')">👩 Sarah (Customer)</button>
+                <button class="persona-tab" onclick="showPersona('rm')">👨‍💼 David (RM)</button>
+                <button class="persona-tab" onclick="showPersona('ds')">👩‍🔬 Elena (Data Scientist)</button>
+            </div>
+            <div class="persona-content" id="persona-admin">
+                <div class="persona-flow">
+                    <div class="flow-step"><div class="flow-num">1</div><div><h4>Spins Up Infrastructure</h4><p><code>python main.py up</code> — launches Kafka, PostgreSQL, Redis, MLflow, Flink via Docker Compose.</p></div></div>
+                    <div class="flow-step"><div class="flow-num">2</div><div><h4>Generates Bank Data</h4><p><code>python main.py generate-customers 1000</code> — creates realistic Indian demographic data with RBI-aligned income brackets.</p></div></div>
+                    <div class="flow-step"><div class="flow-num">3</div><div><h4>Trains ML Pipeline</h4><p><code>python main.py train</code> — 8-step pipeline: dataset build → XGBoost → LightGBM → LSTM → ensemble → SHAP → fairness audit → MLflow registry.</p></div></div>
+                    <div class="flow-step"><div class="flow-num">4</div><div><h4>Monitors in Production</h4><p>Prometheus metrics at <code>/metrics</code>, Grafana dashboards, and Evidently drift detection.</p></div></div>
+                </div>
+            </div>
+            <div class="persona-content" id="persona-customer" style="display:none">
+                <div class="persona-flow">
+                    <div class="flow-step"><div class="flow-num">1</div><div><h4>Sarah Has a Medical Emergency</h4><p>Hospital bill of ₹2.5L hits. She starts making frequent ATM withdrawals and downloads 2 lending apps.</p></div></div>
+                    <div class="flow-step"><div class="flow-num">2</div><div><h4>Engine Detects Stress</h4><p>Flink real-time features spike: <code>atm_withdrawals_7d: 8</code>, <code>lending_app_txns_7d: 3</code>. Ensemble score: <strong>0.82 (Critical)</strong>.</p></div></div>
+                    <div class="flow-step"><div class="flow-num">3</div><div><h4>GenAI Crafts Empathetic Message</h4><p>Groq LLM reads SHAP explanation ("medical expenses") and generates: <em>"Hi Sarah, we noticed some high medical expenses. Would you like to explore our flexible EMI options?"</em></p></div></div>
+                    <div class="flow-step"><div class="flow-num">4</div><div><h4>Intervention Prevents Default</h4><p>Sarah accepts the 3-month EMI restructuring. She never misses a payment. Relationship saved.</p></div></div>
+                </div>
+            </div>
+            <div class="persona-content" id="persona-rm" style="display:none">
+                <div class="persona-flow">
+                    <div class="flow-step"><div class="flow-num">1</div><div><h4>Opens RM Dashboard</h4><p>David sees his portfolio at <code>localhost:8050</code> — risk heatmap, KPI metrics, and a prioritized list of flagged customers.</p></div></div>
+                    <div class="flow-step"><div class="flow-num">2</div><div><h4>Clicks Sarah's Profile</h4><p>Sees the SHAP waterfall chart: "High ATM withdrawals (+0.18), Lending apps (+0.14), Medical spend (+0.09)". No guesswork.</p></div></div>
+                    <div class="flow-step"><div class="flow-num">3</div><div><h4>Gets AI Call Script</h4><p>GenAI generates: <em>"Context: Medical emergency. Goal: Offer 3-month EMI. Opening: 'Hi Sarah, calling to check in about your recent expenses...'"</em></p></div></div>
+                    <div class="flow-step"><div class="flow-num">4</div><div><h4>Resolves on First Call</h4><p>Armed with context and script, David resolves Sarah's case in one 4-minute call instead of 3 follow-ups.</p></div></div>
+                </div>
+            </div>
+            <div class="persona-content" id="persona-ds" style="display:none">
+                <div class="persona-flow">
+                    <div class="flow-step"><div class="flow-num">1</div><div><h4>Reviews Model in MLflow</h4><p>Elena opens <code>localhost:5000</code> — sees XGBoost AUC 0.88, LightGBM 0.87, LSTM 0.82, Ensemble 0.93. All hyperparameters logged.</p></div></div>
+                    <div class="flow-step"><div class="flow-num">2</div><div><h4>Runs Bias Audit</h4><p><code>python main.py audit-fairness</code> — Fairlearn + AIF360 check for disparate impact across age groups, genders, and regions.</p></div></div>
+                    <div class="flow-step"><div class="flow-num">3</div><div><h4>Monitors Model Drift</h4><p>Evidently AI detects when feature distributions shift (e.g., post-COVID spending patterns changed). Triggers retraining.</p></div></div>
+                    <div class="flow-step"><div class="flow-num">4</div><div><h4>Experiments with Improvements</h4><p>Uses Optuna for hyperparameter tuning. Tries TabNet and Temporal Fusion Transformer as future model upgrades.</p></div></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══════════════ TECH STACK ═══════════════ -->
+    <section id="tech-stack">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-tag">Technology</span>
+                <h2>Production-Grade Stack</h2>
+            </div>
+            <div class="tech-categories">
+                <div class="tech-cat">
+                    <h4>Data & Streaming</h4>
+                    <div class="tech-items">
+                        <div class="tech-item"><span class="tech-icon">📨</span>Apache Kafka</div>
+                        <div class="tech-item"><span class="tech-icon">⚡</span>Apache Flink</div>
+                        <div class="tech-item"><span class="tech-icon">📦</span>Apache Spark</div>
+                        <div class="tech-item"><span class="tech-icon">🐘</span>PostgreSQL 16</div>
+                        <div class="tech-item"><span class="tech-icon">🔴</span>Redis 7</div>
+                        <div class="tech-item"><span class="tech-icon">💎</span>Cassandra</div>
+                    </div>
+                </div>
+                <div class="tech-cat">
+                    <h4>Machine Learning</h4>
+                    <div class="tech-items">
+                        <div class="tech-item"><span class="tech-icon">🌲</span>XGBoost</div>
+                        <div class="tech-item"><span class="tech-icon">🌿</span>LightGBM</div>
+                        <div class="tech-item"><span class="tech-icon">🧠</span>PyTorch LSTM</div>
+                        <div class="tech-item"><span class="tech-icon">🔍</span>SHAP + LIME</div>
+                        <div class="tech-item"><span class="tech-icon">⚖️</span>Fairlearn + AIF360</div>
+                        <div class="tech-item"><span class="tech-icon">📊</span>MLflow</div>
+                    </div>
+                </div>
+                <div class="tech-cat">
+                    <h4>Application & DevOps</h4>
+                    <div class="tech-items">
+                        <div class="tech-item"><span class="tech-icon">🚀</span>FastAPI</div>
+                        <div class="tech-item"><span class="tech-icon">📈</span>Plotly Dash</div>
+                        <div class="tech-item"><span class="tech-icon">✨</span>Groq GenAI</div>
+                        <div class="tech-item"><span class="tech-icon">🐳</span>Docker + AKS</div>
+                        <div class="tech-item"><span class="tech-icon">☸️</span>Kubernetes</div>
+                        <div class="tech-item"><span class="tech-icon">🔄</span>GitHub Actions CI/CD</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══════════════ FOOTER ═══════════════ -->
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <div>
+                    <strong>Pre-Delinquency Intervention Engine</strong>
+                    <p>Built for Barclays Hackathon 2026</p>
+                </div>
+                <div class="footer-links">
+                    <a href="http://20.219.40.43:8000/docs" target="_blank">📡 Live API Docs</a>
+                    <a href="https://github.com/MelvinDenish/PreDelinquencyEngine" target="_blank">💻 GitHub</a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
