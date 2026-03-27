@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: celery-worker
-          image: pdi-engine:latest
+          image: pdiengineacr.azurecr.io/pdi-engine:latest
           command: ["celery", "-A", "intervention.celery_app", "worker",
                     "--loglevel=info", "--queues=interventions,scoring",
                     "--concurrency=4"]
@@ -58,7 +58,7 @@ spec:
     spec:
       containers:
         - name: celery-beat
-          image: pdi-engine:latest
+          image: pdiengineacr.azurecr.io/pdi-engine:latest
           command: ["celery", "-A", "intervention.celery_app", "beat",
                     "--loglevel=info"]
           env:

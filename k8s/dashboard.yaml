@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: dashboard
-          image: pdi-engine:latest
+          image: pdiengineacr.azurecr.io/pdi-engine:latest
           command: ["python", "main.py", "dashboard"]
           ports:
             - containerPort: 8050

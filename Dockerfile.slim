@@ -7,9 +7,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev gcc curl && \
     rm -rf /var/lib/apt/lists/*
 
-# Python deps — with retry settings for large packages
-COPY requirements.txt .
-RUN pip install --no-cache-dir --retries 10 --timeout 120 -r requirements.txt
+# Python deps (slim — CPU-only PyTorch, no TF/Flink/Airflow)
+COPY requirements-slim.txt .
+RUN pip install --no-cache-dir -r requirements-slim.txt
 
 # App code
 COPY . .
