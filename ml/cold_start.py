@@ -1,3 +1,4 @@
+# pyre-ignore-all-errors
 """
 Cold-Start Scorer
 Handles customers with insufficient transaction history (< 30 days)

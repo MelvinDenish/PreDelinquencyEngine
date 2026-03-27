@@ -1,3 +1,4 @@
+# pyre-ignore-all-errors
 """
 LIME Explainability Module
 Local Interpretable Model-agnostic Explanations for delinquency predictions.

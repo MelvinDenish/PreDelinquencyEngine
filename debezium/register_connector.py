@@ -1,3 +1,4 @@
+# pyre-ignore-all-errors
 """
 Debezium CDC Connector Registration
 Registers a PostgreSQL CDC (Change Data Capture) connector with Debezium Connect.

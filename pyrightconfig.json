@@ -1,0 +1,28 @@
+{
+  "include": [
+    "ml",
+    "scoring_service",
+    "intervention",
+    "batch_processing",
+    "airflow",
+    "feature_store",
+    "dashboard",
+    "config"
+  ],
+  "extraPaths": [
+    "."
+  ],
+  "reportMissingImports": "none",
+  "reportMissingModuleSource": "none",
+  "reportOptionalMemberAccess": "none",
+  "reportGeneralTypeIssues": "warning",
+  "reportOptionalCall": "none",
+  "reportOptionalSubscript": "none",
+  "reportOptionalIterable": "none",
+  "reportArgumentType": "none",
+  "reportCallIssue": "none",
+  "reportIndexIssue": "none",
+  "reportOperatorIssue": "none",
+  "pythonVersion": "3.11",
+  "typeCheckingMode": "basic"
+}

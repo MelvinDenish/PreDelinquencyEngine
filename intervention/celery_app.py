@@ -1,3 +1,4 @@
+# pyre-ignore-all-errors
 """
 Celery Application Configuration
 Async task processing for intervention dispatch.

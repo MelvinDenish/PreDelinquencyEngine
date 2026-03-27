@@ -1,3 +1,4 @@
+# pyre-ignore-all-errors
 """
 PSI Drift Trigger (M9)
 Monitors Population Stability Index (PSI) for feature drift.

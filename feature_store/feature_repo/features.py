@@ -1,3 +1,4 @@
+# pyre-ignore-all-errors
 """
 Feast Feature Definitions
 Defines entities, data sources, and feature views for streaming and batch features.

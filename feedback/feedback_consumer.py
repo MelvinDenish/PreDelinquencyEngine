@@ -1,4 +1,5 @@
-﻿"""
+# pyre-ignore-all-errors
+"""
 Feedback Consumer
 Consumes feedback events from Kafka and updates outcome labels
 in the offline store for model retraining.

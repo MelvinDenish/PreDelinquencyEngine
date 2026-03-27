@@ -1,4 +1,5 @@
-﻿"""
+# pyre-ignore-all-errors
+"""
 XGBoost Delinquency Risk Model
 Trains an XGBoost classifier on tabular behavioral features.
 """

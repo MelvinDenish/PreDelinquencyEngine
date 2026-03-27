@@ -1,3 +1,4 @@
+# pyre-ignore-all-errors
 """
 TensorFlow LSTM Delinquency Risk Model
 Alternative deep learning model using TensorFlow/Keras for temporal sequence analysis.

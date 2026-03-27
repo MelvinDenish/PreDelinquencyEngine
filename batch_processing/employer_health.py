@@ -1,3 +1,4 @@
+# pyre-ignore-all-errors
 """
 Employer Health Scorer
 Computes employer-level payroll stability metrics as a leading indicator

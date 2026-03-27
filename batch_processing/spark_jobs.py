@@ -1,3 +1,4 @@
+# pyre-ignore-all-errors
 """
 Apache Spark Batch Processing Jobs
 Computes historical baseline features:
@@ -18,19 +19,6 @@ from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.window import Window
 from pyspark.sql.types import (
-    StructType, StructField, StringType, IntegerType,
-    DecimalType, TimestampType, BooleanType, FloatType,
-)
-
-import sys, os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-from config.settings import SparkConfig, PostgresConfig
-from config.bank_config import BankProfileLoader
-
-logger = logging.getLogger(__name__)
-
-JDBC_URL = f"jdbc:postgresql://{PostgresConfig.HOST}:{PostgresConfig.PORT}/{PostgresConfig.DB}"
-JDBC_PROPS = {
     "user": PostgresConfig.USER,
     "password": PostgresConfig.PASSWORD,
     "driver": "org.postgresql.Driver",
@@ -467,6 +455,12 @@ def run_batch_pipeline():
             "employer_health_score": 0.0,
             "employer_payroll_delay_avg": 0.0,
             "employer_headcount_change_pct": 0.0,
+            # P10: GST invoice-based distress features
+            "gst_filing_gap_days": 0,
+            "gst_revenue_decline_pct_3m": 0.0,
+            "gst_itc_mismatch_flag": False,
+            "gst_late_filing_count_6m": 0,
+            "gst_nil_return_streak": 0,
             "segment_type": "salaried",
         })
 

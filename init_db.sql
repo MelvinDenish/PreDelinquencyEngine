@@ -255,3 +255,66 @@ CREATE INDEX IF NOT EXISTS idx_employer_health_score ON employer_health(employer
 CREATE INDEX IF NOT EXISTS idx_product_proposals_customer ON product_action_proposals(customer_id);
 CREATE INDEX IF NOT EXISTS idx_product_proposals_status ON product_action_proposals(status);
 CREATE INDEX IF NOT EXISTS idx_batch_features_segment ON batch_features(segment_type);
+
+-- ============================================================
+-- Phase 2 schema additions
+-- ============================================================
+
+-- P1: Survival analysis outputs on risk_scores
+ALTER TABLE risk_scores ADD COLUMN IF NOT EXISTS tte_days DECIMAL(6,1);
+ALTER TABLE risk_scores ADD COLUMN IF NOT EXISTS p30d DECIMAL(5,4);
+ALTER TABLE risk_scores ADD COLUMN IF NOT EXISTS p60d DECIMAL(5,4);
+ALTER TABLE risk_scores ADD COLUMN IF NOT EXISTS p90d DECIMAL(5,4);
+ALTER TABLE risk_scores ADD COLUMN IF NOT EXISTS risk_score_lower DECIMAL(5,4);
+ALTER TABLE risk_scores ADD COLUMN IF NOT EXISTS risk_score_upper DECIMAL(5,4);
+ALTER TABLE risk_scores ADD COLUMN IF NOT EXISTS confidence_flag VARCHAR(20) DEFAULT 'full';
+ALTER TABLE risk_scores ADD COLUMN IF NOT EXISTS uplift_score DECIMAL(6,4);
+ALTER TABLE risk_scores ADD COLUMN IF NOT EXISTS shadow_score DECIMAL(5,4);
+
+-- P4: A/B holdout assignment tracking
+CREATE TABLE IF NOT EXISTS ab_holdout_assignments (
+    id SERIAL PRIMARY KEY,
+    customer_id VARCHAR(50) REFERENCES customers(customer_id),
+    experiment_id VARCHAR(100) NOT NULL DEFAULT 'default',
+    group_name VARCHAR(20) NOT NULL,        -- 'treated' or 'control'
+    risk_tier VARCHAR(20),
+    assigned_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(customer_id, experiment_id)
+);
+CREATE INDEX IF NOT EXISTS idx_ab_holdout_experiment ON ab_holdout_assignments(experiment_id, group_name);
+
+-- P8: Shadow mode scoring log
+CREATE TABLE IF NOT EXISTS shadow_scores (
+    id SERIAL PRIMARY KEY,
+    customer_id VARCHAR(50),
+    live_score DECIMAL(5,4),
+    shadow_score DECIMAL(5,4),
+    divergence DECIMAL(5,4),
+    features_hash VARCHAR(64),
+    scored_at TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_shadow_scores_scored_at ON shadow_scores(scored_at);
+CREATE INDEX IF NOT EXISTS idx_shadow_scores_divergence ON shadow_scores(divergence);
+
+-- P11: Household linkage
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS household_id VARCHAR(100);
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS household_role VARCHAR(30) DEFAULT 'primary';
+CREATE INDEX IF NOT EXISTS idx_customers_household ON customers(household_id);
+
+-- P2: Nudge journey cancellation reason
+ALTER TABLE nudge_journeys ADD COLUMN IF NOT EXISTS cancellation_reason VARCHAR(100);
+ALTER TABLE nudge_journeys ADD COLUMN IF NOT EXISTS sent_at TIMESTAMP;
+ALTER TABLE nudge_journeys ADD COLUMN IF NOT EXISTS dispatch_result TEXT;
+CREATE INDEX IF NOT EXISTS idx_nudge_journey_scheduled ON nudge_journeys(scheduled_at, status);
+CREATE INDEX IF NOT EXISTS idx_nudge_journey_customer ON nudge_journeys(customer_id, status);
+
+-- P10: GST feature columns on batch_features
+ALTER TABLE batch_features ADD COLUMN IF NOT EXISTS gst_filing_regularity_6m DECIMAL(4,3) DEFAULT 0;
+ALTER TABLE batch_features ADD COLUMN IF NOT EXISTS gst_gap_months DECIMAL(4,1) DEFAULT 0;
+ALTER TABLE batch_features ADD COLUMN IF NOT EXISTS business_inflow_trend_pct DECIMAL(6,3) DEFAULT 0;
+ALTER TABLE batch_features ADD COLUMN IF NOT EXISTS gst_amount_trend_pct DECIMAL(6,3) DEFAULT 0;
+ALTER TABLE batch_features ADD COLUMN IF NOT EXISTS vendor_payment_count_90d INTEGER DEFAULT 0;
+
+-- Additional Phase 2 indexes
+CREATE INDEX IF NOT EXISTS idx_risk_scores_tte ON risk_scores(tte_days) WHERE tte_days IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_customers_household_id ON customers(household_id) WHERE household_id IS NOT NULL;

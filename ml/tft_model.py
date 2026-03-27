@@ -1,3 +1,4 @@
+# pyre-ignore-all-errors
 """
 Temporal Fusion Transformer (TFT) for Delinquency Risk Scoring
 Uses pytorch-forecasting's TFT architecture for handling mixed

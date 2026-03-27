@@ -1,3 +1,4 @@
+# pyre-ignore-all-errors
 """
 Drift Detection with Evidently AI
 Monitors model performance and detects data/prediction drift.

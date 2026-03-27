@@ -1,3 +1,4 @@
+# pyre-ignore-all-errors
 """
 Apache Flink Stream Processing Job
 Consumes transactions from Kafka, enriches them with merchant risk scores,

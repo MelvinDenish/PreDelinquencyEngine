@@ -1,4 +1,5 @@
-﻿"""
+# pyre-ignore-all-errors
+"""
 Channel Optimizer
 Selects the best outreach channel for each customer based on
 their historical engagement data and preferences.

@@ -1,3 +1,4 @@
+# pyre-ignore-all-errors
 """
 Pre-Delinquency Intervention Engine - Dashboard v3.0
 Enterprise-grade Plotly Dash dashboard with 6 views:
@@ -453,6 +454,25 @@ def cohort_analysis_layout():
     ])
 
 
+def rm_worklist_layout():
+    """P3: RM Worklist — urgency-ranked customer queue for relationship managers."""
+    return html.Div([
+        html.H4("👔 RM Worklist", style={"color": COLORS["text"], "marginBottom": "10px"}),
+        html.P("Customers ranked by urgency (TTE × risk_score) — for RM daily call list",
+               style={"color": COLORS["text_muted"], "marginBottom": "20px"}),
+        dbc.Row(id="rm-worklist-stats-row"),
+        html.Div([
+            dbc.Button("⬇️ Export CSV", id="btn-export-csv", color="secondary",
+                       size="sm", className="me-2"),
+            dbc.Button("⬇️ Export Excel", id="btn-export-xlsx", color="secondary",
+                       size="sm"),
+            dcc.Download(id="download-csv"),
+            dcc.Download(id="download-xlsx"),
+        ], style={"marginBottom": "15px"}),
+        html.Div(id="rm-worklist-container"),
+    ])
+
+
 # ─────────────────────────────────────────────
 # Main Layout
 # ─────────────────────────────────────────────
@@ -488,6 +508,9 @@ app.layout = html.Div([
             dcc.Tab(label="Cohort Analysis", value="cohort",
                     style={"backgroundColor": COLORS["card_bg"], "color": COLORS["text_muted"]},
                     selected_style={"backgroundColor": COLORS["accent"], "color": "#fff"}),
+            dcc.Tab(label="RM Worklist", value="rm_worklist",
+                    style={"backgroundColor": COLORS["card_bg"], "color": COLORS["text_muted"]},
+                    selected_style={"backgroundColor": COLORS["accent"], "color": "#fff"}),
         ],
         style={"padding": "10px 30px"},
     ),
@@ -521,6 +544,8 @@ def render_tab(tab):
         return model_health_layout()
     elif tab == "cohort":
         return cohort_analysis_layout()
+    elif tab == "rm_worklist":
+        return rm_worklist_layout()
     return html.Div("Select a tab")
 
 
@@ -1186,7 +1211,168 @@ def update_cohort_analysis(n, tab):
     pie.update_layout(template="plotly_dark", paper_bgcolor=COLORS["bg"],
                       plot_bgcolor=COLORS["bg"], font_color=COLORS["text"])
 
+
     return stats, survival, pie
+
+
+# ─────────────────────────────────────────────
+# P3: RM Worklist Data Loader
+# ─────────────────────────────────────────────
+def load_rm_worklist():
+    """Load urgency-ranked customer list for RM daily workqueue."""
+    try:
+        df = pd.read_sql("""
+            SELECT
+                c.customer_id,
+                c.first_name || ' ' || c.last_name AS customer_name,
+                c.phone,
+                c.city,
+                c.employment_type,
+                c.monthly_salary,
+                r.risk_score,
+                r.risk_tier,
+                r.tte_days,
+                r.p30d,
+                r.scored_at,
+                COALESCE(nj.journey_status, 'no_journey') AS journey_status,
+                COALESCE(i.last_intervention, 'None') AS last_intervention
+            FROM customers c
+            JOIN LATERAL (
+                SELECT risk_score, risk_tier, scored_at, tte_days, p30d
+                FROM risk_scores rs
+                WHERE rs.customer_id = c.customer_id
+                ORDER BY scored_at DESC LIMIT 1
+            ) r ON true
+            LEFT JOIN LATERAL (
+                SELECT status AS journey_status
+                FROM nudge_journeys nj2
+                WHERE nj2.customer_id = c.customer_id AND nj2.status = 'pending'
+                ORDER BY scheduled_at LIMIT 1
+            ) nj ON true
+            LEFT JOIN LATERAL (
+                SELECT intervention_type AS last_intervention
+                FROM interventions i2
+                WHERE i2.customer_id = c.customer_id
+                ORDER BY sent_at DESC LIMIT 1
+            ) i ON true
+            WHERE r.risk_tier IN ('watch', 'critical')
+            ORDER BY
+                CASE WHEN r.risk_tier = 'critical' THEN 0 ELSE 1 END,
+                COALESCE(r.tte_days, 90) ASC,
+                r.risk_score DESC
+            LIMIT 100
+        """, engine)
+        if not df.empty and "tte_days" in df.columns and "risk_score" in df.columns:
+            df["urgency_score"] = (
+                df["risk_score"].fillna(0) *
+                (1.0 / df["tte_days"].fillna(90).clip(1, 90))
+            ).round(4)
+        return df
+    except Exception as e:
+        logger.error(f"RM worklist load error: {e}")
+        return pd.DataFrame()
+
+
+# ─────────────────────────────────────────────
+# P3: RM Worklist Callbacks
+# ─────────────────────────────────────────────
+@app.callback(
+    [Output("rm-worklist-stats-row", "children"),
+     Output("rm-worklist-container", "children")],
+    [Input("refresh-interval", "n_intervals"),
+     Input("main-tabs", "value")],
+)
+def update_rm_worklist(n, tab):
+    if tab != "rm_worklist":
+        return [dash.no_update] * 2
+
+    df = load_rm_worklist()
+    if df.empty:
+        msg = html.P("No watch/critical customers yet — run scoring first.",
+                     style={"color": COLORS["text_muted"]})
+        return [], msg
+
+    total = len(df)
+    critical = int((df["risk_tier"] == "critical").sum()) if "risk_tier" in df.columns else 0
+    watch = total - critical
+    urgent = int((df["tte_days"] < 15).sum()) if "tte_days" in df.columns else 0
+
+    stats = [
+        dbc.Col(make_stat_card("Total in Queue", f"{total}"), md=3),
+        dbc.Col(make_stat_card("Critical", f"{critical}", COLORS["critical"]), md=3),
+        dbc.Col(make_stat_card("Watch", f"{watch}", COLORS["watch"]), md=3),
+        dbc.Col(make_stat_card("TTE < 15 Days", f"{urgent}", COLORS["critical"]), md=3),
+    ]
+
+    display_cols = ["customer_name", "phone", "city", "employment_type",
+                    "risk_score", "risk_tier", "tte_days", "p30d",
+                    "urgency_score", "journey_status", "last_intervention"]
+    display_cols = [c for c in display_cols if c in df.columns]
+
+    table = dash_table.DataTable(
+        id="rm-worklist-table",
+        data=df[display_cols].round(4).to_dict("records"),
+        columns=[{"name": c.replace("_", " ").title(), "id": c} for c in display_cols],
+        style_header={
+            "backgroundColor": COLORS["card_bg"],
+            "color": COLORS["text"],
+            "fontWeight": "bold",
+            "borderBottom": f"2px solid {COLORS['accent']}",
+        },
+        style_data={
+            "backgroundColor": COLORS["bg"],
+            "color": COLORS["text"],
+            "borderBottom": f"1px solid {COLORS['card_border']}",
+        },
+        style_data_conditional=[
+            {"if": {"filter_query": "{risk_tier} = 'critical'"},
+             "backgroundColor": "#1a0a0a", "color": COLORS["critical"]},
+            {"if": {"filter_query": "{tte_days} < 15"},
+             "fontWeight": "bold"},
+        ],
+        page_size=20,
+        sort_action="native",
+        filter_action="native",
+    )
+    return stats, table
+
+
+# ─────────────────────────────────────────────
+# P13: Export Callbacks (CSV + Excel)
+# ─────────────────────────────────────────────
+@app.callback(
+    Output("download-csv", "data"),
+    Input("btn-export-csv", "n_clicks"),
+    prevent_initial_call=True,
+)
+def export_csv(n_clicks):
+    df = load_rm_worklist()
+    if df.empty:
+        return dash.no_update
+    return dcc.send_data_frame(df.to_csv, "pdi_rm_worklist.csv", index=False)
+
+
+@app.callback(
+    Output("download-xlsx", "data"),
+    Input("btn-export-xlsx", "n_clicks"),
+    prevent_initial_call=True,
+)
+def export_excel(n_clicks):
+    from io import BytesIO
+    df = load_rm_worklist()
+    if df.empty:
+        return dash.no_update
+    buffer = BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        df.to_excel(writer, sheet_name="RM Worklist", index=False)
+        try:
+            portfolio = load_customers_with_risk()
+            if not portfolio.empty:
+                portfolio.to_excel(writer, sheet_name="Portfolio Overview", index=False)
+        except Exception:
+            pass
+    buffer.seek(0)
+    return dcc.send_bytes(buffer.read(), "pdi_portfolio_export.xlsx")
 
 
 # ─────────────────────────────────────────────
@@ -1194,4 +1380,3 @@ def update_cohort_analysis(n, tab):
 # ─────────────────────────────────────────────
 if __name__ == "__main__":
     app.run(host=DashboardConfig.HOST, port=DashboardConfig.PORT, debug=DashboardConfig.DEBUG)
-

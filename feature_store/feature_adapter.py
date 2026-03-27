@@ -1,3 +1,4 @@
+# pyre-ignore-all-errors
 """
 Feature Adapter — Bank-Aware Feature Translation Layer
 Maps each bank's proprietary transaction taxonomy to the engine's

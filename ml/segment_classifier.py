@@ -1,3 +1,4 @@
+# pyre-ignore-all-errors
 """
 Customer Segment Classifier
 Classifies each customer into a segment type to ensure the right

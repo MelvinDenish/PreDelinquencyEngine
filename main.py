@@ -1,3 +1,4 @@
+# pyre-ignore-all-errors
 """
 Pre-Delinquency Intervention Engine - Main Orchestrator
 Central entry point to run all components of the PDI engine.

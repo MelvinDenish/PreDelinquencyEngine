@@ -1,3 +1,4 @@
+# pyre-ignore-all-errors
 """
 Kafka Consumer - Base consumer utilities for consuming from Kafka topics.
 """

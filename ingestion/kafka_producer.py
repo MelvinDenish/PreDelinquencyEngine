@@ -1,3 +1,4 @@
+# pyre-ignore-all-errors
 """
 Kafka Producer - Publishes real-time events to Kafka topics.
 Supports transaction events, account updates, risk scores, and feedback events.

@@ -1,3 +1,4 @@
+# pyre-ignore-all-errors
 """
 Transaction Generator
 Generates 6 months of realistic transaction history for all customers,

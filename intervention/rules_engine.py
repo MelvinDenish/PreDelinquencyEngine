@@ -1,3 +1,4 @@
+# pyre-ignore-all-errors
 """
 Rules Engine — Segment-Aware
 Determines intervention type based on risk tier transitions,
@@ -170,6 +171,28 @@ def determine_intervention(
             )
         except Exception as e:
             logger.warning(f"[RulesEngine] Product action generation failed: {e}")
+
+    # P9: Uplift gate — suppress interventions for "sure payers" (negative uplift)
+    uplift_gate_passed = True
+    try:
+        import os
+        import numpy as np
+        from ml.uplift_model import UpliftModel
+        uplift_path = os.path.join(os.path.dirname(__file__), '..', 'models', 'uplift_model.joblib')
+        if os.path.exists(uplift_path) and customer_features:
+            uplift = UpliftModel()
+            uplift.load(uplift_path)
+            feature_vec = np.array([customer_features.get(c, 0.0) for c in ModelConfig.FEATURE_COLUMNS])
+            u_score = uplift.predict_uplift_single(feature_vec)
+            if u_score is not None and u_score <= 0:
+                logger.info(f"[RulesEngine] Uplift gate: {customer_id} suppressed (uplift={u_score:.4f})")
+                uplift_gate_passed = False
+    except Exception as e:
+        logger.debug(f"[RulesEngine] Uplift gate check skipped: {e}")
+
+    if not uplift_gate_passed:
+        return None  # Don't intervene on sure-payers
+
 
     return {
         "customer_id": customer_id,

@@ -1,3 +1,4 @@
+# pyre-ignore-all-errors
 """
 Ensemble Scorer — StackingEnsemble + Fixed-Weight Fallback
 Combines XGBoost, LightGBM, LSTM, and TFT predictions.

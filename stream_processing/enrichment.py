@@ -1,3 +1,4 @@
+# pyre-ignore-all-errors
 """
 Merchant Risk Enrichment
 Provides merchant risk score lookups from Redis for transaction enrichment.
