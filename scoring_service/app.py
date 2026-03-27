@@ -22,6 +22,7 @@ from pydantic import BaseModel
 import uvicorn
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+import threading
 from config.settings import (
     PostgresConfig, RedisConfig, ModelConfig, ScoringConfig, FeastConfig,
 )
@@ -31,6 +32,8 @@ from ml.lstm_model import LSTMDelinquencyModel
 from ml.ensemble import EnsembleScorer
 from ml.explainability import SHAPExplainer
 from scoring_service.cassandra_client import write_risk_score as cassandra_write_risk_score
+
+from intervention.notification_dispatcher import process_and_notify
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -390,6 +393,26 @@ async def score_customer(request: ScoreRequest):
         )
     except Exception as e:
         logger.warning(f"Cassandra score storage failed (non-blocking): {e}")
+
+    # --- NEW: Trigger Notification Dispatcher for n8n demo ---
+    if ensemble_score >= 0.5:
+        demo_customer = {
+            "customer_id": customer_id,
+            "first_name": "Demo",
+            "last_name": "Customer",
+            "email": os.getenv("SMTP_USER", ""),  # Sends email to yourself
+            "phone": os.getenv("TEST_PHONE_TO", ""), # Gets your test phone number
+            "monthly_salary": 50000,
+            "dti_ratio": 0.45
+        }
+        demo_intervention = {
+            "risk_score": ensemble_score,
+            "risk_tier": risk_tier,
+            "intervention_type": "escalation_call" if ensemble_score >= 0.75 else "wellness_checkin",
+            "shap_drivers": top_shap if top_shap else []
+        }
+        logger.info(f"Triggering background notification for {customer_id}")
+        threading.Thread(target=process_and_notify, args=(demo_customer, demo_intervention)).start()
 
     return ScoreResponse(
         customer_id=customer_id,

@@ -408,6 +408,7 @@ services:
       TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID}
       TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN}
       TWILIO_FROM_NUMBER: ${TWILIO_FROM_NUMBER}
+      TEST_PHONE_TO: ${TEST_PHONE_TO}
 
     volumes:
       - ./models:/app/models
