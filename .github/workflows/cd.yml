@@ -27,12 +27,13 @@ jobs:
 
       - name: Build Docker image
         run: |
-          IMAGE_TAG="${{ env.DOCKER_REGISTRY }}/${{ github.repository }}/${{ env.DOCKER_IMAGE }}"
+          IMAGE_TAG=$(echo "${{ env.DOCKER_REGISTRY }}/${{ github.repository }}/${{ env.DOCKER_IMAGE }}" | tr '[:upper:]' '[:lower:]')
+          echo "Building image: ${IMAGE_TAG}"
           docker build -t ${IMAGE_TAG}:${{ github.sha }} -t ${IMAGE_TAG}:latest .
 
       - name: Push Docker image
         run: |
-          IMAGE_TAG="${{ env.DOCKER_REGISTRY }}/${{ github.repository }}/${{ env.DOCKER_IMAGE }}"
+          IMAGE_TAG=$(echo "${{ env.DOCKER_REGISTRY }}/${{ github.repository }}/${{ env.DOCKER_IMAGE }}" | tr '[:upper:]' '[:lower:]')
           docker push ${IMAGE_TAG}:${{ github.sha }}
           docker push ${IMAGE_TAG}:latest
 
@@ -72,7 +73,7 @@ jobs:
 
       - name: Deploy application
         run: |
-          IMAGE="${{ env.DOCKER_REGISTRY }}/${{ github.repository }}/${{ env.DOCKER_IMAGE }}:${{ github.sha }}"
+          IMAGE=$(echo "${{ env.DOCKER_REGISTRY }}/${{ github.repository }}/${{ env.DOCKER_IMAGE }}:${{ github.sha }}" | tr '[:upper:]' '[:lower:]')
 
           # Replace image references in K8s manifests
           sed -i "s|pdiengineacr.azurecr.io/pdi-engine:latest|${IMAGE}|g" k8s/scoring-service.yaml
