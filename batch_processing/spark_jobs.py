@@ -5,6 +5,9 @@ Computes historical baseline features:
   - Utility payment delay average
   - Discretionary spend trends
   - Demographic & fairness features
+  - Asset-side: FD premature withdrawal, SIP stoppage, insurance lapse
+  - Employer health score
+  - Customer segment classification
 
 Runs on real Spark cluster (Master + Worker in Docker).
 """
@@ -22,6 +25,7 @@ from pyspark.sql.types import (
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from config.settings import SparkConfig, PostgresConfig
+from config.bank_config import BankProfileLoader
 
 logger = logging.getLogger(__name__)
 
@@ -265,25 +269,186 @@ def compute_monthly_spend_stats(spark: SparkSession):
     return result
 
 
+# ─────────────────────────────────────────────
+# M2: Asset-Side Feature Jobs
+# ─────────────────────────────────────────────
+def compute_fd_premature_withdrawal(spark: SparkSession):
+    """
+    Detect FD/RD premature closures — strong distress signal.
+    A customer breaking a fixed deposit before maturity needs cash urgently.
+    """
+    logger.info("[Spark] Computing FD premature withdrawal features...")
+
+    ninety_days_ago = (datetime.now() - timedelta(days=90)).strftime("%Y-%m-%d")
+
+    txns_df = read_table(spark, "transactions").filter(
+        (F.col("merchant_category").isin("fixed_deposit", "fd_closure", "recurring_deposit")) &
+        (F.col("direction") == "credit") &
+        (F.col("timestamp") >= ninety_days_ago)
+    ).select("customer_id", "amount", "timestamp", "txn_type")
+
+    result = txns_df.groupBy("customer_id").agg(
+        F.count("*").alias("fd_closed_count_90d"),
+        F.round(F.sum("amount"), 2).alias("fd_closure_amount_90d"),
+    )
+
+    logger.info(f"[Spark] Computed FD closures for {result.count()} customers")
+    return result
+
+
+def compute_sip_stoppage(spark: SparkSession):
+    """
+    Detect SIP/mutual fund payment stoppage.
+    If a customer had regular MF payments for 2+ months then stopped, that's a stress signal.
+    """
+    logger.info("[Spark] Computing SIP stoppage features...")
+
+    six_months_ago = (datetime.now() - timedelta(days=180)).strftime("%Y-%m-%d")
+
+    txns_df = read_table(spark, "transactions").filter(
+        (F.col("merchant_category").isin("mutual_fund", "sip", "investment")) &
+        (F.col("direction") == "debit") &
+        (F.col("status") == "success") &
+        (F.col("timestamp") >= six_months_ago)
+    ).select("customer_id", "amount", "timestamp")
+
+    # Count MF payments per month per customer
+    monthly_mf = txns_df.withColumn(
+        "month", F.date_format("timestamp", "yyyy-MM")
+    ).groupBy("customer_id", "month").agg(
+        F.count("*").alias("mf_count")
+    )
+
+    # Count months with MF activity and months without
+    months_with_sip = monthly_mf.groupBy("customer_id").agg(
+        F.count("*").alias("active_months"),
+        F.max("month").alias("last_active_month")
+    )
+
+    current_month = datetime.now().strftime("%Y-%m")
+    prev_month = (datetime.now() - timedelta(days=30)).strftime("%Y-%m")
+
+    # SIP stopped if had activity in older months but not in last 1 month
+    result = months_with_sip.withColumn(
+        "sip_stopped_flag",
+        F.when(
+            (F.col("active_months") >= 2) &
+            (F.col("last_active_month") < prev_month),
+            F.lit(True)
+        ).otherwise(F.lit(False))
+    ).withColumn(
+        "sip_gaps_3m",
+        F.when(F.col("sip_stopped_flag"), F.lit(3) - F.col("active_months"))
+         .otherwise(F.lit(0))
+    ).select("customer_id", "sip_stopped_flag", "sip_gaps_3m")
+
+    logger.info(f"[Spark] Computed SIP stoppage for {result.count()} customers")
+    return result
+
+
+def compute_insurance_lapse(spark: SparkSession):
+    """
+    Detect insurance premium lapses — missing or failed insurance payments.
+    Missing an insurance premium signals severe cashflow crisis.
+    """
+    logger.info("[Spark] Computing insurance lapse features...")
+
+    three_months_ago = (datetime.now() - timedelta(days=90)).strftime("%Y-%m-%d")
+
+    txns_df = read_table(spark, "transactions").filter(
+        (F.col("merchant_category").isin("insurance", "lic", "health_insurance")) &
+        (F.col("direction") == "debit") &
+        (F.col("timestamp") >= three_months_ago)
+    ).select("customer_id", "status", "timestamp")
+
+    result = txns_df.groupBy("customer_id").agg(
+        F.sum(F.when(F.col("status") == "failed", 1).otherwise(0)).alias("insurance_missed_payments_3m"),
+        F.count("*").alias("insurance_total_attempts_3m"),
+    ).withColumn(
+        "insurance_lapse_flag",
+        F.when(F.col("insurance_missed_payments_3m") >= 1, F.lit(True))
+         .otherwise(F.lit(False))
+    ).select("customer_id", "insurance_lapse_flag", "insurance_missed_payments_3m")
+
+    logger.info(f"[Spark] Computed insurance lapse for {result.count()} customers")
+    return result
+
+
+# ─────────────────────────────────────────────
+# M1: Segment Classification (Spark-level)
+# ─────────────────────────────────────────────
+def compute_customer_segment(spark: SparkSession):
+    """
+    Assign a segment_type to each customer using rule-based classification.
+    """
+    logger.info("[Spark] Computing customer segments...")
+
+    customers_df = read_table(spark, "customers").select(
+        "customer_id", "age", "employment_type", "industry_sector", "region"
+    )
+
+    result = customers_df.withColumn(
+        "segment_type",
+        F.when(F.col("age") >= 60, F.lit("retiree"))
+         .when(F.col("employment_type") == "retired", F.lit("retiree"))
+         .when(F.col("industry_sector").isin("Agriculture", "Farming", "Dairy"), F.lit("agricultural"))
+         .when(F.col("employment_type").isin("gig_worker", "freelancer", "contract_worker"), F.lit("gig_worker"))
+         .when(F.col("employment_type").isin("self_employed", "business_owner", "professional"), F.lit("self_employed"))
+         .when(F.col("employment_type").isin("salaried_private", "salaried_govt"), F.lit("salaried"))
+         .otherwise(F.lit("salaried"))
+    ).select("customer_id", "segment_type")
+
+    logger.info(f"[Spark] Assigned segments for {result.count()} customers")
+    return result
+
+
 def run_batch_pipeline():
     """Run the complete batch feature computation pipeline."""
     print("=" * 70)
     print("Pre-Delinquency Engine - Spark Batch Feature Computation")
+    print("  Includes: salary delay, utility delay, spend trends, demographics,")
+    print("            FD closures, SIP stoppage, insurance lapse, employer health,")
+    print("            customer segment classification")
     print("=" * 70)
 
+    bank_profile = BankProfileLoader.get_active_profile()
     spark = get_spark_session()
 
     try:
-        # Compute all features
+        # ── Original batch features ──
         salary_delay = compute_salary_delay(spark)
         utility_delay = compute_utility_delay(spark)
         spend_trends = compute_spend_trends(spark)
         demographics = compute_demographics(spark)
         spend_stats = compute_monthly_spend_stats(spark)
 
-        # Merge all features
+        # ── M2: Asset-side features ──
+        fd_features = compute_fd_premature_withdrawal(spark)
+        sip_features = compute_sip_stoppage(spark)
+        insurance_features = compute_insurance_lapse(spark)
+
+        # ── M3: Employer health ──
+        try:
+            from batch_processing.employer_health import EmployerHealthScorer
+            employer_scorer = EmployerHealthScorer(spark)
+            employer_features = employer_scorer.get_customer_employer_features()
+        except Exception as e:
+            logger.warning(f"[Spark] Employer health computation skipped: {e}")
+            employer_features = None
+
+        # ── M1: Customer segment ──
+        segment_features = compute_customer_segment(spark)
+
+        # ── Merge all features ──
         batch_features = demographics
-        for df in [salary_delay, utility_delay, spend_trends, spend_stats]:
+        feature_dfs = [
+            salary_delay, utility_delay, spend_trends, spend_stats,
+            fd_features, sip_features, insurance_features, segment_features,
+        ]
+        if employer_features is not None:
+            feature_dfs.append(employer_features)
+
+        for df in feature_dfs:
             batch_features = batch_features.join(df, "customer_id", "left")
 
         # Fill nulls
@@ -293,6 +458,16 @@ def run_batch_pipeline():
             "discretionary_spend_trend": 1.0,
             "avg_monthly_spend_3m": 0.0,
             "spend_volatility_3m": 0.0,
+            "fd_closed_count_90d": 0,
+            "fd_closure_amount_90d": 0.0,
+            "sip_stopped_flag": False,
+            "sip_gaps_3m": 0,
+            "insurance_lapse_flag": False,
+            "insurance_missed_payments_3m": 0,
+            "employer_health_score": 0.0,
+            "employer_payroll_delay_avg": 0.0,
+            "employer_headcount_change_pct": 0.0,
+            "segment_type": "salaried",
         })
 
         # Write to PostgreSQL (batch_features table)

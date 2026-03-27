@@ -94,10 +94,12 @@ class DashboardConfig:
 
 
 class ModelConfig:
-    # 3-model ensemble weights (XGBoost + LightGBM + LSTM)
-    ENSEMBLE_XGB_WEIGHT = float(os.getenv("ENSEMBLE_XGB_WEIGHT", 0.40))
-    ENSEMBLE_LGB_WEIGHT = float(os.getenv("ENSEMBLE_LGB_WEIGHT", 0.30))
-    ENSEMBLE_LSTM_WEIGHT = float(os.getenv("ENSEMBLE_LSTM_WEIGHT", 0.30))
+    # 4-model ensemble weights (XGBoost + LightGBM + LSTM + TFT)
+    ENSEMBLE_XGB_WEIGHT = float(os.getenv("ENSEMBLE_XGB_WEIGHT", 0.30))
+    ENSEMBLE_LGB_WEIGHT = float(os.getenv("ENSEMBLE_LGB_WEIGHT", 0.20))
+    ENSEMBLE_LSTM_WEIGHT = float(os.getenv("ENSEMBLE_LSTM_WEIGHT", 0.15))
+    ENSEMBLE_TFT_WEIGHT = float(os.getenv("ENSEMBLE_TFT_WEIGHT", 0.35))
+    USE_META_LEARNER = os.getenv("USE_META_LEARNER", "True").lower() == "true"
     RISK_CRITICAL_THRESHOLD = float(os.getenv("RISK_CRITICAL_THRESHOLD", 0.7))
     RISK_WATCH_THRESHOLD = float(os.getenv("RISK_WATCH_THRESHOLD", 0.5))
     COOLDOWN_DAYS = int(os.getenv("COOLDOWN_DAYS", 7))
@@ -133,6 +135,15 @@ class ModelConfig:
         "has_mortgage",
         "avg_monthly_spend_3m",
         "spend_volatility_3m",
+        # M2: Asset-side features
+        "fd_closed_count_90d",
+        "fd_closure_amount_90d",
+        "sip_stopped_flag",
+        "sip_gaps_3m",
+        "insurance_lapse_flag",
+        "insurance_missed_payments_3m",
+        # M3: Employer health
+        "employer_health_score",
     ]
 
 

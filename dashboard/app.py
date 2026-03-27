@@ -1,11 +1,12 @@
-﻿"""
-Pre-Delinquency Intervention Engine - Dashboard
-Enterprise-grade Plotly Dash dashboard with 5 views:
+"""
+Pre-Delinquency Intervention Engine - Dashboard v3.0
+Enterprise-grade Plotly Dash dashboard with 6 views:
 1. Portfolio Risk Heatmap
 2. Trending Customers Panel
-3. Intervention Tracker
-4. Customer Deep-Dive View
-5. Model Health Monitor
+3. Intervention Tracker (+ ROI panel)
+4. Customer Deep-Dive View (+ TFT Attention Heatmap)
+5. Model Health Monitor (+ PSI Drift + Channel Health)
+6. Cohort Analysis
 """
 import os
 import sys
@@ -13,6 +14,7 @@ import json
 import logging
 from datetime import datetime, timedelta
 
+import redis as redis_lib
 import dash
 from dash import html, dcc, dash_table, callback_context
 from dash.dependencies import Input, Output, State
@@ -25,12 +27,18 @@ import numpy as np
 from sqlalchemy import create_engine
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-from config.settings import PostgresConfig, DashboardConfig
+from config.settings import PostgresConfig, RedisConfig, DashboardConfig
 
 logger = logging.getLogger(__name__)
 
 # Database connection
 engine = create_engine(PostgresConfig.get_url())
+
+# Redis connection (for TFT attention weights)
+try:
+    _redis = redis_lib.Redis(host=RedisConfig.HOST, port=RedisConfig.PORT, db=RedisConfig.DB)
+except Exception:
+    _redis = None
 
 # ─────────────────────────────────────────────
 # Dash App
@@ -202,6 +210,132 @@ def load_model_health():
     except Exception:
         return pd.DataFrame(), pd.DataFrame()
 
+def load_psi_drift_data():
+    """Load PSI per-feature drift scores."""
+    try:
+        df = pd.read_sql("""
+            SELECT feature_name, psi_value, detection_date
+            FROM drift_feature_psi
+            WHERE detection_date = (
+                SELECT MAX(detection_date) FROM drift_feature_psi
+            )
+            ORDER BY psi_value DESC
+        """, engine)
+        if df.empty:
+            # Fallback: generate from drift_logs summary
+            df = pd.read_sql("""
+                SELECT unnest(string_to_array(drifted_features, ',')) AS feature_name,
+                       drift_score / GREATEST(1, array_length(string_to_array(drifted_features, ','), 1)) AS psi_value
+                FROM drift_logs
+                WHERE detection_timestamp = (
+                    SELECT MAX(detection_timestamp) FROM drift_logs
+                )
+            """, engine)
+        return df
+    except Exception:
+        return pd.DataFrame(columns=["feature_name", "psi_value"])
+
+
+def load_cohort_analysis():
+    """Load weekly cohort of watch-tier entrants and their 30-day outcomes."""
+    try:
+        df = pd.read_sql("""
+            WITH cohort_entry AS (
+                SELECT customer_id,
+                       DATE_TRUNC('week', scored_at) AS cohort_week,
+                       MIN(scored_at) AS first_watch_at
+                FROM risk_scores
+                WHERE risk_tier = 'watch'
+                GROUP BY customer_id, DATE_TRUNC('week', scored_at)
+            ),
+            outcomes AS (
+                SELECT ce.customer_id, ce.cohort_week,
+                       CASE
+                           WHEN EXISTS (
+                               SELECT 1 FROM risk_scores rs
+                               WHERE rs.customer_id = ce.customer_id
+                                 AND rs.scored_at > ce.first_watch_at + INTERVAL '30 days'
+                                 AND rs.risk_tier = 'stable'
+                           ) THEN 'recovered'
+                           WHEN EXISTS (
+                               SELECT 1 FROM risk_scores rs
+                               WHERE rs.customer_id = ce.customer_id
+                                 AND rs.scored_at > ce.first_watch_at
+                                 AND rs.risk_tier = 'critical'
+                           ) THEN 'progressed_critical'
+                           ELSE 'still_watch'
+                       END AS outcome
+                FROM cohort_entry ce
+            )
+            SELECT cohort_week, outcome, COUNT(*) AS cnt
+            FROM outcomes
+            GROUP BY cohort_week, outcome
+            ORDER BY cohort_week
+        """, engine)
+        return df
+    except Exception:
+        return pd.DataFrame(columns=["cohort_week", "outcome", "cnt"])
+
+
+def load_intervention_roi():
+    """Load intervention ROI metrics per intervention type."""
+    try:
+        df = pd.read_sql("""
+            SELECT
+                intervention_type,
+                COUNT(*) AS customers_contacted,
+                SUM(CASE WHEN outcome = 'paid' THEN 1 ELSE 0 END) AS paid_within_7d,
+                SUM(CASE WHEN outcome = 'restructured' THEN 1 ELSE 0 END) AS restructured,
+                SUM(CASE WHEN outcome = 'defaulted' THEN 1 ELSE 0 END) AS defaulted,
+                ROUND(AVG(CASE WHEN outcome = 'paid' THEN 1.0 ELSE 0.0 END) * 100, 1) AS success_rate_pct
+            FROM interventions
+            WHERE outcome IS NOT NULL
+            GROUP BY intervention_type
+            ORDER BY success_rate_pct DESC
+        """, engine)
+        return df
+    except Exception:
+        return pd.DataFrame()
+
+
+def load_channel_health():
+    """Load per-channel daily delivery rates."""
+    try:
+        df = pd.read_sql("""
+            SELECT
+                DATE(sent_at) AS send_date,
+                channel,
+                COUNT(*) AS total_sent,
+                SUM(CASE WHEN status IN ('delivered', 'opened', 'paid') THEN 1 ELSE 0 END) AS delivered,
+                ROUND(
+                    SUM(CASE WHEN status IN ('delivered', 'opened', 'paid') THEN 1.0 ELSE 0.0 END)
+                    / GREATEST(COUNT(*), 1) * 100, 1
+                ) AS delivery_rate_pct
+            FROM interventions
+            WHERE sent_at > NOW() - INTERVAL '30 days'
+            GROUP BY DATE(sent_at), channel
+            ORDER BY send_date
+        """, engine)
+        return df
+    except Exception:
+        return pd.DataFrame()
+
+
+def load_tft_attention(customer_id: str):
+    """Load TFT attention weights from Redis cache."""
+    if _redis is None:
+        return None
+    try:
+        import pickle
+        key = f"tft:attention:{customer_id}"
+        data = _redis.get(key)
+        if data:
+            return pickle.loads(data)
+        return None
+    except Exception:
+        return None
+
+
 
 # ─────────────────────────────────────────────
 # Layout Components
@@ -256,6 +390,11 @@ def intervention_tracker_layout():
             dbc.Col(dcc.Graph(id="intervention-timeline"), md=6),
         ]),
         html.Div(id="intervention-table-container"),
+        # M12: Intervention ROI Panel
+        html.H5("💰 Intervention ROI", style={"color": COLORS["text"], "marginTop": "25px"}),
+        html.P("Per-type effectiveness: contacted → paid within 7 days",
+               style={"color": COLORS["text_muted"], "fontSize": "12px"}),
+        html.Div(id="intervention-roi-container"),
     ])
 
 
@@ -283,8 +422,34 @@ def model_health_layout():
             dbc.Col(dcc.Graph(id="risk-score-trend"), md=6),
             dbc.Col(dcc.Graph(id="tier-distribution-trend"), md=6),
         ]),
+        # PSI Feature Drift Panel (M12)
+        html.H5("📊 Feature Drift (PSI)", style={"color": COLORS["text"], "marginTop": "25px"}),
+        html.P("Population Stability Index per feature — green < 0.10, yellow < 0.25, red ≥ 0.25",
+               style={"color": COLORS["text_muted"], "fontSize": "12px"}),
+        dcc.Graph(id="psi-drift-chart"),
+        # Channel Health Panel (M12)
+        html.H5("📡 Channel Health", style={"color": COLORS["text"], "marginTop": "25px"}),
+        html.P("Per-channel daily delivery rate (target ≥ 90%)",
+               style={"color": COLORS["text_muted"], "fontSize": "12px"}),
+        dcc.Graph(id="channel-health-chart"),
+        html.Div(id="channel-alert-badges"),
+        # Drift Table
         html.H5("Drift Detection History", style={"color": COLORS["text"], "marginTop": "20px"}),
         html.Div(id="drift-table-container"),
+    ])
+
+
+def cohort_analysis_layout():
+    """M12: Cohort Analysis tab — weekly watch-tier entrant outcomes."""
+    return html.Div([
+        html.H4("📈 Cohort Analysis", style={"color": COLORS["text"], "marginBottom": "10px"}),
+        html.P("Weekly cohort of watch-tier entrants → 30-day outcome tracking",
+               style={"color": COLORS["text_muted"], "marginBottom": "20px"}),
+        dbc.Row(id="cohort-stats-row"),
+        dbc.Row([
+            dbc.Col(dcc.Graph(id="cohort-survival-chart"), md=8),
+            dbc.Col(dcc.Graph(id="cohort-outcome-pie"), md=4),
+        ]),
     ])
 
 
@@ -320,6 +485,9 @@ app.layout = html.Div([
             dcc.Tab(label="Model Health", value="model_health",
                     style={"backgroundColor": COLORS["card_bg"], "color": COLORS["text_muted"]},
                     selected_style={"backgroundColor": COLORS["accent"], "color": "#fff"}),
+            dcc.Tab(label="Cohort Analysis", value="cohort",
+                    style={"backgroundColor": COLORS["card_bg"], "color": COLORS["text_muted"]},
+                    selected_style={"backgroundColor": COLORS["accent"], "color": "#fff"}),
         ],
         style={"padding": "10px 30px"},
     ),
@@ -351,6 +519,8 @@ def render_tab(tab):
         return customer_deepdive_layout()
     elif tab == "model_health":
         return model_health_layout()
+    elif tab == "cohort":
+        return cohort_analysis_layout()
     return html.Div("Select a tab")
 
 
@@ -595,6 +765,54 @@ def update_interventions(n, tab):
     return by_type, by_channel, outcomes, timeline, table
 
 
+# --- M12: Intervention ROI Callback ---
+@app.callback(
+    Output("intervention-roi-container", "children"),
+    [Input("refresh-interval", "n_intervals"),
+     Input("main-tabs", "value")],
+)
+def update_intervention_roi(n, tab):
+    if tab != "interventions":
+        return dash.no_update
+
+    df = load_intervention_roi()
+    if df.empty:
+        return html.P("No intervention outcome data yet. Outcomes populate via the daily resolution DAG.",
+                      style={"color": COLORS["text_muted"]})
+
+    return dash_table.DataTable(
+        data=df.to_dict("records"),
+        columns=[
+            {"name": "Intervention Type", "id": "intervention_type"},
+            {"name": "Contacted", "id": "customers_contacted", "type": "numeric"},
+            {"name": "Paid (7d)", "id": "paid_within_7d", "type": "numeric"},
+            {"name": "Restructured", "id": "restructured", "type": "numeric"},
+            {"name": "Defaulted", "id": "defaulted", "type": "numeric"},
+            {"name": "Success Rate %", "id": "success_rate_pct", "type": "numeric",
+             "format": dash_table.Format.Format(precision=1)},
+        ],
+        style_header={
+            "backgroundColor": COLORS["card_bg"],
+            "color": COLORS["text"],
+            "fontWeight": "bold",
+            "borderBottom": f"2px solid {COLORS['accent']}",
+        },
+        style_data={
+            "backgroundColor": COLORS["bg"],
+            "color": COLORS["text"],
+            "borderBottom": f"1px solid {COLORS['card_border']}",
+        },
+        style_data_conditional=[
+            {"if": {"filter_query": "{success_rate_pct} >= 50"},
+             "color": COLORS["stable"], "fontWeight": "bold"},
+            {"if": {"filter_query": "{success_rate_pct} < 30"},
+             "color": COLORS["critical"]},
+        ],
+        page_size=10,
+        sort_action="native",
+    )
+
+
 # --- Customer Deep-Dive Callbacks ---
 @app.callback(
     Output("customer-select", "options"),
@@ -705,6 +923,33 @@ def update_customer_detail(customer_id):
     else:
         txn_fig = go.Figure()
 
+    # TFT Attention Heatmap (M12)
+    attention = load_tft_attention(customer_id)
+    if attention is not None:
+        attn_array = np.array(attention)
+        if attn_array.ndim == 1:
+            attn_array = attn_array.reshape(1, -1)
+        day_labels = [f"Day {i+1}" for i in range(attn_array.shape[-1])]
+        attn_fig = px.imshow(
+            attn_array,
+            x=day_labels,
+            y=["Attention"],
+            color_continuous_scale="YlOrRd",
+            title="TFT Temporal Attention Weights (which days drove the prediction)",
+            labels={"color": "Attention Weight"},
+            aspect="auto",
+        )
+        attn_fig.update_layout(template="plotly_dark", paper_bgcolor=COLORS["bg"],
+                                plot_bgcolor=COLORS["bg"], font_color=COLORS["text"],
+                                height=200)
+    else:
+        attn_fig = go.Figure()
+        attn_fig.update_layout(
+            template="plotly_dark", paper_bgcolor=COLORS["bg"],
+            title="TFT Attention Heatmap (no cached data — run scoring first)",
+            font_color=COLORS["text_muted"], height=200,
+        )
+
     return html.Div([
         profile,
         dbc.Row([
@@ -714,6 +959,11 @@ def update_customer_detail(customer_id):
         dbc.Row([
             dbc.Col(dcc.Graph(figure=txn_fig), md=12),
         ]),
+        # M12: TFT Attention Heatmap
+        html.H5("🧠 TFT Attention Heatmap", style={"color": COLORS["text"], "marginTop": "20px"}),
+        html.P("Dark cells = days the Temporal Fusion Transformer focused on for this prediction",
+               style={"color": COLORS["text_muted"], "fontSize": "12px"}),
+        dcc.Graph(figure=attn_fig),
     ])
 
 
@@ -722,13 +972,16 @@ def update_customer_detail(customer_id):
     [Output("model-stats-row", "children"),
      Output("risk-score-trend", "figure"),
      Output("tier-distribution-trend", "figure"),
+     Output("psi-drift-chart", "figure"),
+     Output("channel-health-chart", "figure"),
+     Output("channel-alert-badges", "children"),
      Output("drift-table-container", "children")],
     [Input("refresh-interval", "n_intervals"),
      Input("main-tabs", "value")],
 )
 def update_model_health(n, tab):
     if tab != "model_health":
-        return [dash.no_update] * 4
+        return [dash.no_update] * 7
 
     scores_df, drift_df = load_model_health()
     empty = go.Figure().update_layout(template="plotly_dark",
@@ -737,7 +990,7 @@ def update_model_health(n, tab):
 
     if scores_df.empty:
         msg = html.P("No model metrics available yet.", style={"color": COLORS["text_muted"]})
-        return [], empty, empty, msg
+        return [], empty, empty, empty, empty, html.Div(), msg
 
     # Stats
     latest = scores_df.iloc[-1] if not scores_df.empty else {}
@@ -778,6 +1031,80 @@ def update_model_health(n, tab):
                            paper_bgcolor=COLORS["bg"], plot_bgcolor=COLORS["bg"],
                            font_color=COLORS["text"])
 
+    # M12: PSI Feature Drift chart
+    psi_df = load_psi_drift_data()
+    if not psi_df.empty and "psi_value" in psi_df.columns:
+        psi_df["color"] = psi_df["psi_value"].apply(
+            lambda v: COLORS["stable"] if v < 0.10
+            else (COLORS["watch"] if v < 0.25 else COLORS["critical"])
+        )
+        psi_chart = go.Figure(
+            go.Bar(
+                x=psi_df["feature_name"],
+                y=psi_df["psi_value"],
+                marker_color=psi_df["color"],
+                text=psi_df["psi_value"].round(3),
+                textposition="outside",
+            )
+        )
+        psi_chart.add_hline(y=0.10, line_dash="dash", line_color=COLORS["watch"],
+                            annotation_text="Minor Drift (0.10)")
+        psi_chart.add_hline(y=0.25, line_dash="dash", line_color=COLORS["critical"],
+                            annotation_text="Major Drift (0.25)")
+        psi_chart.update_layout(
+            title="PSI per Feature (Latest Run)",
+            template="plotly_dark", paper_bgcolor=COLORS["bg"],
+            plot_bgcolor=COLORS["bg"], font_color=COLORS["text"],
+            xaxis_tickangle=-45,
+        )
+    else:
+        psi_chart = go.Figure()
+        psi_chart.update_layout(
+            template="plotly_dark", paper_bgcolor=COLORS["bg"],
+            title="PSI Feature Drift (no data yet — run drift monitoring first)",
+            font_color=COLORS["text_muted"],
+        )
+
+    # M12: Channel Health chart
+    ch_df = load_channel_health()
+    if not ch_df.empty and "delivery_rate_pct" in ch_df.columns:
+        ch_df["send_date"] = pd.to_datetime(ch_df["send_date"])
+        ch_chart = px.line(
+            ch_df, x="send_date", y="delivery_rate_pct", color="channel",
+            title="Channel Delivery Rate (Last 30 Days)",
+            markers=True,
+        )
+        ch_chart.add_hline(y=90, line_dash="dash", line_color=COLORS["stable"],
+                           annotation_text="Target (90%)")
+        ch_chart.update_layout(
+            template="plotly_dark", paper_bgcolor=COLORS["bg"],
+            plot_bgcolor=COLORS["bg"], font_color=COLORS["text"],
+        )
+
+        # Alert badges for channels below 90% in last 24h
+        latest_day = ch_df["send_date"].max()
+        latest_rates = ch_df[ch_df["send_date"] == latest_day]
+        low_channels = latest_rates[latest_rates["delivery_rate_pct"] < 90]
+        if not low_channels.empty:
+            badges = dbc.Row([
+                dbc.Col(
+                    dbc.Badge(
+                        f"⚠️ {row['channel']}: {row['delivery_rate_pct']}%",
+                        color="warning", className="me-2 p-2",
+                    ), width="auto"
+                ) for _, row in low_channels.iterrows()
+            ], className="mt-2")
+        else:
+            badges = dbc.Badge("✅ All channels above 90%", color="success", className="p-2")
+    else:
+        ch_chart = go.Figure()
+        ch_chart.update_layout(
+            template="plotly_dark", paper_bgcolor=COLORS["bg"],
+            title="Channel Health (no intervention data yet)",
+            font_color=COLORS["text_muted"],
+        )
+        badges = html.Div()
+
     # Drift table
     if not drift_df.empty:
         drift_table = dash_table.DataTable(
@@ -794,7 +1121,72 @@ def update_model_health(n, tab):
     else:
         drift_table = html.P("No drift detection runs yet.", style={"color": COLORS["text_muted"]})
 
-    return stats, trend, tier_fig, drift_table
+    return stats, trend, tier_fig, psi_chart, ch_chart, badges, drift_table
+
+
+# --- M12: Cohort Analysis Callback ---
+@app.callback(
+    [Output("cohort-stats-row", "children"),
+     Output("cohort-survival-chart", "figure"),
+     Output("cohort-outcome-pie", "figure")],
+    [Input("refresh-interval", "n_intervals"),
+     Input("main-tabs", "value")],
+)
+def update_cohort_analysis(n, tab):
+    if tab != "cohort":
+        return [dash.no_update] * 3
+
+    df = load_cohort_analysis()
+    empty = go.Figure().update_layout(template="plotly_dark",
+                                      paper_bgcolor=COLORS["bg"],
+                                      plot_bgcolor=COLORS["bg"])
+
+    if df.empty:
+        msg = html.P("No cohort data yet — requires watch-tier scoring history.",
+                     style={"color": COLORS["text_muted"]})
+        return [dbc.Col(msg)], empty, empty
+
+    # Stats
+    total = int(df["cnt"].sum())
+    recovered = int(df[df["outcome"] == "recovered"]["cnt"].sum())
+    progressed = int(df[df["outcome"] == "progressed_critical"]["cnt"].sum())
+    still_watch = int(df[df["outcome"] == "still_watch"]["cnt"].sum())
+
+    stats = [
+        dbc.Col(make_stat_card("Total Watch Entrants", f"{total:,}"), md=3),
+        dbc.Col(make_stat_card("Recovered", f"{recovered:,}", COLORS["stable"]), md=3),
+        dbc.Col(make_stat_card("Progressed Critical", f"{progressed:,}", COLORS["critical"]), md=3),
+        dbc.Col(make_stat_card("Still Watch", f"{still_watch:,}", COLORS["watch"]), md=3),
+    ]
+
+    # Stacked bar chart by cohort week
+    outcome_colors = {
+        "recovered": COLORS["stable"],
+        "progressed_critical": COLORS["critical"],
+        "still_watch": COLORS["watch"],
+    }
+    df["cohort_week"] = pd.to_datetime(df["cohort_week"]).dt.strftime("%Y-W%V")
+    survival = px.bar(
+        df, x="cohort_week", y="cnt", color="outcome",
+        color_discrete_map=outcome_colors,
+        title="Watch-Tier Cohort Outcomes (30-Day Tracking)",
+        barmode="stack",
+        labels={"cnt": "Customers", "cohort_week": "Cohort Week"},
+    )
+    survival.update_layout(template="plotly_dark", paper_bgcolor=COLORS["bg"],
+                           plot_bgcolor=COLORS["bg"], font_color=COLORS["text"])
+
+    # Overall outcome pie
+    outcome_totals = df.groupby("outcome")["cnt"].sum().reset_index()
+    pie = px.pie(
+        outcome_totals, values="cnt", names="outcome",
+        color="outcome", color_discrete_map=outcome_colors,
+        title="Overall Cohort Outcomes",
+    )
+    pie.update_layout(template="plotly_dark", paper_bgcolor=COLORS["bg"],
+                      plot_bgcolor=COLORS["bg"], font_color=COLORS["text"])
+
+    return stats, survival, pie
 
 
 # ─────────────────────────────────────────────

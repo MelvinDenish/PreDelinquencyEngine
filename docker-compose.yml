@@ -401,6 +401,14 @@ services:
       MLFLOW_TRACKING_URI: http://pdi-mlflow:5000
       CASSANDRA_HOST: pdi-cassandra
       CASSANDRA_PORT: "9042"
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN}
+      TWILIO_FROM_NUMBER: ${TWILIO_FROM_NUMBER}
+
     volumes:
       - ./models:/app/models
       - pdi-app-data:/app/data

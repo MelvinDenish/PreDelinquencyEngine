@@ -1,0 +1,118 @@
+# ============================================================
+# Barclays India — Bank Profile Configuration
+# Reference implementation for the PDI Engine multi-bank adapter
+# ============================================================
+
+bank_id: BARCLAYS_IN
+display_name: "Barclays India"
+currency: INR
+locale: en-IN
+
+# Transaction taxonomy — how Barclays India labels transaction types
+income_credit_tags:
+  - salary_credit
+  - pension_credit
+  - inward_remittance
+
+discretionary_categories:
+  - dining
+  - entertainment
+  - clothing
+  - luxury_goods
+  - travel
+
+emi_merchant_tags:
+  - emi
+  - auto_debit
+
+lending_app_merchants:
+  - kreditbee
+  - moneytap
+  - paysense
+  - navi
+  - kissht
+  - cashe
+  - early_salary
+  - flexsalary
+  - mpokket
+  - dhani
+  - stashfin
+  - moneyview
+
+distress_merchant_tags:
+  - pawnshop
+  - gold_loan
+  - chit_fund
+  - money_lender
+  - payday_lender
+
+medical_merchant_tags:
+  - healthcare
+  - hospital
+  - pharmacy
+  - medical
+  - diagnostic
+
+salary_credit_day_field: salary_credit_day
+
+# Feature availability
+feature_availability:
+  app_events: false
+  gst_data: false
+  fd_rd_data: true
+  insurance_data: true
+  mutual_fund_data: true
+  employer_data: true
+
+# Channel providers
+channel_providers:
+  sms: twilio
+  whatsapp: twilio
+  email: smtp
+  push: webhook
+  rm_call: internal
+  collector: internal
+
+# Risk thresholds
+risk_thresholds:
+  watch: 0.50
+  critical: 0.70
+
+# Segment-specific threshold overrides
+segment_thresholds:
+  gig_worker:
+    watch: 0.45
+    critical: 0.75
+  agricultural:
+    watch: 0.45
+    critical: 0.75
+  retiree:
+    watch: 0.50
+    critical: 0.72
+
+# Regulatory flags (RBI-compliant)
+regulatory_flags:
+  rbi_fair_practice: true
+  cooldown_hours: 24
+  max_sms_per_day: 3
+  max_rm_calls_per_week: 2
+  data_retention_days: 365
+
+# Intervention costs (INR) — for ROI calculations
+intervention_costs:
+  sms: 1.0
+  email: 0.5
+  whatsapp: 2.0
+  app_push: 0.1
+  rm_call: 200.0
+  collector_assignment: 2000.0
+
+# Category mapping: bank's MCC codes → engine canonical categories
+# Add any bank-specific mappings here if MCC taxonomy differs
+category_mapping:
+  FOOD_AND_BEVERAGE: dining
+  MOVIE_THEATRE: entertainment
+  APPAREL: clothing
+  PREMIUM_RETAIL: luxury_goods
+  AIR_TRAVEL: travel
+  RAIL_TRAVEL: travel

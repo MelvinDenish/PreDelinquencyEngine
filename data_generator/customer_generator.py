@@ -81,6 +81,27 @@ INDUSTRY_SECTORS = {
     "retired": ["Pension"],
 }
 
+# Employer names by industry sector (for M3 employer health scoring)
+EMPLOYER_NAMES = {
+    "IT/ITES": ["TCS", "Infosys", "Wipro", "HCL Technologies", "Tech Mahindra", "Cognizant",
+                "Mindtree", "Mphasis", "L&T Infotech", "Persistent Systems", "Coforge"],
+    "BFSI": ["HDFC Bank", "ICICI Bank", "SBI", "Axis Bank", "Kotak Mahindra",
+             "Bajaj Finance", "HDFC Life", "SBI Life", "LIC", "Paytm"],
+    "Manufacturing": ["Tata Steel", "JSW Steel", "Ultratech Cement", "Hindalco",
+                      "Sun Pharma", "Asian Paints", "Larsen & Toubro", "Bharat Forge"],
+    "Retail": ["Reliance Retail", "DMart", "Tata CLiQ", "Shoppers Stop", "V-Mart"],
+    "Pharma": ["Dr Reddy's", "Cipla", "Lupin", "Aurobindo Pharma", "Biocon"],
+    "Telecom": ["Reliance Jio", "Airtel", "Vi (Vodafone Idea)", "BSNL"],
+    "FMCG": ["Hindustan Unilever", "ITC", "Nestle India", "Dabur", "Marico", "Godrej"],
+    "Automotive": ["Tata Motors", "Maruti Suzuki", "Bajaj Auto", "Mahindra & Mahindra", "Hero MotoCorp"],
+    "E-commerce": ["Flipkart", "Amazon India", "Meesho", "Nykaa", "Swiggy", "Zomato"],
+    "Central Govt": ["GOI Ministries"], "State Govt": ["State Dept"],
+    "PSU": ["ONGC", "BHEL", "NTPC", "GAIL", "IOC", "Coal India"],
+    "Defence": ["Indian Army", "Indian Navy", "Indian Air Force", "DRDO"],
+    "Railways": ["Indian Railways"],
+    "Education": ["KVS", "NVS", "State University", "IIT", "NIT"],
+}
+
 # Life events that can trigger financial stress
 LIFE_EVENTS = [
     ("job_loss",           0.04, "high"),       # 4% of stressed customers
@@ -338,6 +359,8 @@ def generate_customers(num_customers: int = None, stress_pct: float = None) -> L
             "region": region,
             "employment_type": employment_type,
             "industry_sector": industry,
+            "employer_name": random.choice(EMPLOYER_NAMES.get(industry, [f"{industry} Corp"])),
+            "employer_sector": industry,
             "income_bracket": bracket_name,
             "monthly_salary": monthly_salary,
             "salary_credit_day": _generate_salary_day(),

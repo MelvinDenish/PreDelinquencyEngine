@@ -1,0 +1,95 @@
+# ============================================================
+# Generic Bank Template — Fill this for onboarding a new bank
+# Copy this file and rename to {bank_id_lowercase}.yaml
+# ============================================================
+
+bank_id: BANK_NAME        # Unique identifier, e.g. HDFC, SBI, ICICI
+display_name: "Bank Name"  # Display name used in messages and dashboard
+currency: INR              # Currency code
+locale: en-IN              # Locale for GenAI messages — en-IN, hi-IN, ta-IN etc.
+
+# How this bank labels income credit transactions
+income_credit_tags:
+  - salary_credit
+  # - pension_credit
+  # - inward_remittance
+
+# Categories this bank considers discretionary
+discretionary_categories:
+  - dining
+  - entertainment
+  - clothing
+  - luxury_goods
+  - travel
+
+# How EMI debits are tagged
+emi_merchant_tags:
+  - emi
+  - auto_debit
+
+# Known predatory lending app merchant names
+lending_app_merchants:
+  - kreditbee
+  - moneytap
+
+# Merchants indicating financial distress
+distress_merchant_tags:
+  - pawnshop
+  - gold_loan
+
+# Medical merchants (excluded from discretionary for retirees)
+medical_merchant_tags:
+  - healthcare
+  - hospital
+
+salary_credit_day_field: salary_credit_day
+
+# Which data sources are available at this bank
+feature_availability:
+  app_events: false      # Does the bank have a mobile app event stream?
+  gst_data: false        # Can we access GST filing data for self-employed?
+  fd_rd_data: true       # Are FD/RD tables accessible?
+  insurance_data: true   # Insurance premium data available?
+  mutual_fund_data: true # MF/SIP tracking available?
+  employer_data: true    # Employer name populated in customers table?
+
+# Channel providers — which service each channel uses
+channel_providers:
+  sms: twilio            # twilio | gupshup | msg91
+  whatsapp: twilio       # twilio | gupshup
+  email: smtp            # smtp | sendgrid
+  push: webhook          # webhook | firebase
+  rm_call: internal
+  collector: internal
+
+# Risk tier thresholds
+risk_thresholds:
+  watch: 0.50
+  critical: 0.70
+
+# Segment-specific overrides (optional)
+segment_thresholds:
+  gig_worker:
+    watch: 0.45
+    critical: 0.75
+
+# Regulatory compliance flags
+regulatory_flags:
+  rbi_fair_practice: true
+  cooldown_hours: 24
+  max_sms_per_day: 3
+  max_rm_calls_per_week: 2
+  data_retention_days: 365
+
+# Per-channel cost in local currency — used for ROI panel
+intervention_costs:
+  sms: 1.0
+  email: 0.5
+  whatsapp: 2.0
+  app_push: 0.1
+  rm_call: 200.0
+  collector_assignment: 2000.0
+
+# MCC / category mapping: bank-specific labels → engine canonical labels
+# Map any non-standard category names your bank uses
+category_mapping: {}
