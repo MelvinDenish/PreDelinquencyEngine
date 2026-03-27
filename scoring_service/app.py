@@ -40,6 +40,13 @@ from scoring_service.sequence_cache import SequenceCache
 from intervention.product_actions import ProductActionEngine
 from scoring_service.cassandra_client import write_risk_score as cassandra_write_risk_score
 
+from ml.survival_model import SurvivalModel
+from ml.conformal import ConformalPredictor
+from ml.ab_holdout import ABHoldout
+from ml.shadow_scorer import ShadowScorer
+from ml.uplift_model import UpliftModel
+from ml.counterfactual import CounterfactualGenerator
+from scoring_service.grpc_server import start_grpc_server
 from intervention.notification_dispatcher import process_and_notify
 
 logger = logging.getLogger(__name__)
@@ -656,7 +663,7 @@ async def score_customer(request: ScoreRequest):
         logger.warning(f"Cassandra score storage failed (non-blocking): {e}")
 
     # --- NEW: Trigger Notification Dispatcher for n8n demo ---
-    if ensemble_score >= 0.5:
+    if final_score >= 0.5:
         demo_customer = {
             "customer_id": customer_id,
             "first_name": "Demo",
@@ -667,9 +674,9 @@ async def score_customer(request: ScoreRequest):
             "dti_ratio": 0.45
         }
         demo_intervention = {
-            "risk_score": ensemble_score,
+            "risk_score": final_score,
             "risk_tier": risk_tier,
-            "intervention_type": "escalation_call" if ensemble_score >= 0.75 else "wellness_checkin",
+            "intervention_type": "escalation_call" if final_score >= 0.75 else "wellness_checkin",
             "shap_drivers": top_shap if top_shap else []
         }
         logger.info(f"Triggering background notification for {customer_id}")
