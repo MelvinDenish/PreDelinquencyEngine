@@ -1,8 +1,9 @@
 """
-FastAPI Scoring Service
+FastAPI Scoring Service — v3.0
 Provides REST endpoints for real-time delinquency risk scoring.
-Integrates Feast feature retrieval, XGBoost + LightGBM + LSTM ensemble inference,
-SHAP + LIME explainability, Cassandra risk score storage, and Prometheus metrics.
+Integrates XGBoost + LightGBM + LSTM + TFT ensemble with meta-learner stacking,
+cold-start handling, segment classification, product action proposals,
+SHAP + LIME explainability, Cassandra storage, and Prometheus metrics.
 """
 import os
 import sys
@@ -29,8 +30,13 @@ from config.settings import (
 from ml.xgboost_model import XGBoostDelinquencyModel
 from ml.lightgbm_model import LightGBMDelinquencyModel
 from ml.lstm_model import LSTMDelinquencyModel
-from ml.ensemble import EnsembleScorer
+from ml.ensemble import EnsembleScorer, StackingEnsemble
 from ml.explainability import SHAPExplainer
+from ml.tft_model import TFTDelinquencyModel
+from ml.cold_start import ColdStartScorer
+from ml.segment_classifier import CustomerSegmentClassifier
+from scoring_service.sequence_cache import SequenceCache
+from intervention.product_actions import ProductActionEngine
 from scoring_service.cassandra_client import write_risk_score as cassandra_write_risk_score
 
 from intervention.notification_dispatcher import process_and_notify
@@ -43,8 +49,10 @@ logging.basicConfig(level=logging.INFO)
 # ─────────────────────────────────────────────
 app = FastAPI(
     title="Pre-Delinquency Intervention Engine - Scoring Service",
-    description="Real-time delinquency risk scoring with SHAP + LIME explainability (XGBoost + LightGBM + LSTM ensemble) + Prometheus metrics + Cassandra storage",
-    version="2.1.0",
+    description="Real-time risk scoring: XGBoost + LightGBM + LSTM + TFT ensemble "
+                "with meta-learner stacking, cold-start handling, segment classification, "
+                "SHAP + LIME explainability, Prometheus metrics, Cassandra storage",
+    version="3.0.0",
 )
 
 app.add_middleware(
@@ -78,10 +86,16 @@ except ImportError:
 xgb_model: Optional[XGBoostDelinquencyModel] = None
 lgb_model: Optional[LightGBMDelinquencyModel] = None
 lstm_model: Optional[LSTMDelinquencyModel] = None
+tft_model: Optional[TFTDelinquencyModel] = None
 ensemble: Optional[EnsembleScorer] = None
+stacker: Optional[StackingEnsemble] = None
 shap_explainer: Optional[SHAPExplainer] = None
 lime_explainer = None
 redis_client: Optional[redis_lib.Redis] = None
+cold_start_scorer = ColdStartScorer()
+segment_classifier = CustomerSegmentClassifier()
+sequence_cache: Optional[SequenceCache] = None
+product_engine = ProductActionEngine()
 
 
 # ─────────────────────────────────────────────
@@ -98,13 +112,18 @@ class ScoreResponse(BaseModel):
     risk_score: float
     risk_tier: str
     credit_score_mapped: int
+    segment_type: Optional[str] = None
+    is_cold_start: bool = False
     xgboost_score: float
     lightgbm_score: Optional[float] = None
     lstm_score: Optional[float] = None
+    tft_score: Optional[float] = None
     ensemble_score: float
+    meta_learner_used: bool = False
     top_shap_features: Optional[list] = None
     top_lime_features: Optional[list] = None
     explanation: Optional[str] = None
+    product_actions: Optional[list] = None
     scored_at: str
 
 class HealthResponse(BaseModel):
@@ -226,7 +245,8 @@ def store_risk_score(score_data: dict):
 @app.on_event("startup")
 async def load_models():
     """Load all models on startup."""
-    global xgb_model, lgb_model, lstm_model, ensemble, shap_explainer, lime_explainer, redis_client
+    global xgb_model, lgb_model, lstm_model, tft_model, ensemble, stacker
+    global shap_explainer, lime_explainer, redis_client, sequence_cache
 
     # Expose Prometheus /metrics endpoint
     if _prometheus_enabled:
@@ -258,6 +278,26 @@ async def load_models():
     except Exception as e:
         logger.warning(f"LightGBM load failed: {e}")
 
+    # Load LSTM
+    try:
+        lstm_path = os.path.join(MODEL_DIR, "lstm_model.pt")
+        if os.path.exists(lstm_path):
+            lstm_model = LSTMDelinquencyModel()
+            lstm_model.load(lstm_path)
+            logger.info("LSTM model loaded")
+    except Exception as e:
+        logger.warning(f"LSTM load failed: {e}")
+
+    # Load TFT
+    try:
+        tft_path = os.path.join(MODEL_DIR, "tft_model.pt")
+        if os.path.exists(tft_path):
+            tft_model = TFTDelinquencyModel()
+            tft_model.load(tft_path)
+            logger.info("TFT model loaded")
+    except Exception as e:
+        logger.warning(f"TFT load failed: {e}")
+
     # SHAP
     if xgb_model is not None:
         try:
@@ -278,19 +318,26 @@ async def load_models():
         except Exception as e:
             logger.warning(f"LIME init failed: {e}")
 
-    # Load LSTM
-    try:
-        lstm_path = os.path.join(MODEL_DIR, "lstm_model.pt")
-        if os.path.exists(lstm_path):
-            lstm_model = LSTMDelinquencyModel()
-            lstm_model.load(lstm_path)
-            logger.info("LSTM model loaded")
-    except Exception as e:
-        logger.warning(f"LSTM load failed: {e}")
-
-    # Initialize ensemble
+    # Initialize ensemble + StackingEnsemble
     ensemble = EnsembleScorer()
-    logger.info("Scoring service v2.0 ready (XGBoost + LightGBM + LSTM + SHAP + LIME)")
+    meta_path = os.path.join(MODEL_DIR, "meta_learner.joblib")
+    stacker = StackingEnsemble(meta_learner_path=meta_path)
+    logger.info(f"Meta-learner loaded: {stacker.meta_learner is not None}")
+
+    # Sequence cache
+    try:
+        sequence_cache = SequenceCache()
+        cached_count = sequence_cache.get_cached_customer_count()
+        logger.info(f"Sequence cache connected ({cached_count} cached customers)")
+    except Exception as e:
+        logger.warning(f"Sequence cache unavailable: {e}")
+
+    logger.info(
+        f"Scoring service v3.0 ready "
+        f"(XGB:{xgb_model is not None} LGB:{lgb_model is not None} "
+        f"LSTM:{lstm_model is not None} TFT:{tft_model is not None} "
+        f"MetaLearner:{stacker.meta_learner is not None})"
+    )
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -302,6 +349,8 @@ async def health_check():
             "xgboost": xgb_model is not None,
             "lightgbm": lgb_model is not None,
             "lstm": lstm_model is not None,
+            "tft": tft_model is not None,
+            "meta_learner": stacker.meta_learner is not None if stacker else False,
             "shap": shap_explainer is not None,
             "lime": lime_explainer is not None,
         },
@@ -311,7 +360,7 @@ async def health_check():
 
 @app.post("/score", response_model=ScoreResponse)
 async def score_customer(request: ScoreRequest):
-    """Score a single customer using the 3-model ensemble."""
+    """Score a single customer using 4-model ensemble + meta-learner stacking."""
     if xgb_model is None and lgb_model is None:
         raise HTTPException(status_code=503, detail="No models loaded")
 
@@ -321,21 +370,76 @@ async def score_customer(request: ScoreRequest):
     features = assemble_feature_vector(customer_id)
     features_2d = features.reshape(1, -1)
 
+    # Step 1b: Classify customer segment
+    segment_type = "salaried"  # default
+    try:
+        feature_dict = dict(zip(ModelConfig.FEATURE_COLUMNS, features))
+        segment_info = segment_classifier.classify(feature_dict)
+        segment_type = segment_info["segment_type"]
+    except Exception as e:
+        logger.warning(f"Segment classification failed: {e}")
+
+    # Step 1c: Cold-start check
+    is_cold_start = cold_start_scorer.is_cold_start(customer_id)
+
     # Step 2: XGBoost inference
     xgb_prob = float(xgb_model.predict_proba(features_2d)[0]) if xgb_model else None
 
     # Step 3: LightGBM inference
     lgb_prob = float(lgb_model.predict_proba(features_2d)[0]) if lgb_model else None
 
-    # Step 4: LSTM inference (skip for single-score, needs temporal sequences)
+    # Step 4: TFT inference (from sequence cache)
+    tft_prob = None
+    if tft_model is not None and sequence_cache is not None:
+        cached = sequence_cache.get_tft_sequence(customer_id)
+        if cached is not None:
+            try:
+                seq = cached["sequence"].reshape(1, *cached["sequence"].shape)
+                stat = cached["static"].reshape(1, -1)
+                tft_prob = float(tft_model.predict_proba(seq, stat)[0])
+                # Cache attention weights for dashboard
+                attn = tft_model.get_attention_weights(seq, stat)
+                if attn is not None:
+                    sequence_cache.cache_attention_weights(customer_id, attn)
+            except Exception as e:
+                logger.warning(f"TFT inference failed: {e}")
+
+    # Step 5: LSTM inference (skip for single-score without sequences)
     lstm_prob = None
 
-    # Step 5: 3-model Ensemble
-    ensemble_score = ensemble.combine(xgb_prob, lgb_prob, lstm_prob)
-    risk_tier = ensemble.score_to_risk_tier(ensemble_score)
-    credit_score = ensemble.score_to_credit_score(ensemble_score)
+    # Step 6: Ensemble scoring (meta-learner or fixed weights)
+    meta_learner_used = False
+    if stacker and stacker.meta_learner is not None and not is_cold_start:
+        customer_meta = {
+            "income_bracket": "middle",  # Retrieved from features if available
+            "segment_type": segment_type,
+            "tenure_months": int(features_2d[0][ModelConfig.FEATURE_COLUMNS.index("tenure_months")])
+                if "tenure_months" in ModelConfig.FEATURE_COLUMNS else 36,
+            "credit_score": int(features_2d[0][ModelConfig.FEATURE_COLUMNS.index("credit_score")])
+                if "credit_score" in ModelConfig.FEATURE_COLUMNS else 700,
+        }
+        final_score = stacker.combine_stacked(
+            xgb_prob=xgb_prob, lgb_prob=lgb_prob,
+            tft_prob=tft_prob, lstm_prob=lstm_prob,
+            customer_meta=customer_meta,
+        )
+        meta_learner_used = True
+    else:
+        final_score = ensemble.combine(xgb_prob, lgb_prob, lstm_prob, tft_prob)
 
-    # Step 6: SHAP explanation
+    # Step 6b: Cold-start scoring cap
+    if is_cold_start:
+        cs_result = cold_start_scorer.score(customer_id, features_2d[0])
+        final_score = min(final_score, cs_result["risk_score"])
+
+    risk_tier = ensemble.score_to_risk_tier(final_score)
+    credit_score = ensemble.score_to_credit_score(final_score)
+
+    # Cold-start cap: never assign critical
+    if is_cold_start and risk_tier == "critical":
+        risk_tier = "watch"
+
+    # Step 7: SHAP explanation
     top_shap = None
     explanation = None
     if shap_explainer:
@@ -346,7 +450,7 @@ async def score_customer(request: ScoreRequest):
         except Exception as e:
             logger.warning(f"SHAP failed: {e}")
 
-    # Step 7: LIME explanation
+    # Step 8: LIME explanation
     top_lime = None
     if lime_explainer:
         try:
@@ -359,16 +463,31 @@ async def score_customer(request: ScoreRequest):
 
     scored_at = datetime.now().isoformat()
 
-    # Step 8: Store results
+    # Step 9: Product action proposals (for watch/critical)
+    actions = []
+    if risk_tier in ("watch", "critical"):
+        try:
+            feature_dict = dict(zip(ModelConfig.FEATURE_COLUMNS, features))
+            actions = product_engine.generate_proposals(
+                customer_id, feature_dict, final_score, risk_tier
+            )
+        except Exception as e:
+            logger.warning(f"Product actions failed: {e}")
+
+    # Step 10: Store results
     score_data = {
         "customer_id": customer_id,
-        "risk_score": ensemble_score,
+        "risk_score": final_score,
         "risk_tier": risk_tier,
         "credit_score_mapped": credit_score,
         "xgboost_score": xgb_prob,
         "lightgbm_score": lgb_prob,
         "lstm_score": lstm_prob,
-        "ensemble_score": ensemble_score,
+        "tft_score": tft_prob,
+        "ensemble_score": final_score,
+        "segment_type": segment_type,
+        "is_cold_start": is_cold_start,
+        "meta_learner_used": meta_learner_used,
         "top_shap_features": top_shap,
         "top_lime_features": top_lime,
         "scored_at": scored_at,
@@ -382,13 +501,13 @@ async def score_customer(request: ScoreRequest):
     try:
         cassandra_write_risk_score(
             customer_id=customer_id,
-            risk_score=ensemble_score,
+            risk_score=final_score,
             risk_tier=risk_tier,
             credit_score=credit_score,
             xgboost_score=xgb_prob,
             lightgbm_score=lgb_prob,
             lstm_score=lstm_prob,
-            ensemble_score=ensemble_score,
+            ensemble_score=final_score,
             top_features=json.dumps(top_shap) if top_shap else None,
         )
     except Exception as e:
@@ -416,16 +535,21 @@ async def score_customer(request: ScoreRequest):
 
     return ScoreResponse(
         customer_id=customer_id,
-        risk_score=ensemble_score,
+        risk_score=final_score,
         risk_tier=risk_tier,
         credit_score_mapped=credit_score,
+        segment_type=segment_type,
+        is_cold_start=is_cold_start,
         xgboost_score=xgb_prob or 0.0,
         lightgbm_score=lgb_prob,
         lstm_score=lstm_prob,
-        ensemble_score=ensemble_score,
+        tft_score=tft_prob,
+        ensemble_score=final_score,
+        meta_learner_used=meta_learner_used,
         top_shap_features=top_shap,
         top_lime_features=top_lime,
         explanation=explanation,
+        product_actions=[a["action_type"] for a in actions] if actions else None,
         scored_at=scored_at,
     )
 

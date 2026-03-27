@@ -89,6 +89,19 @@ CREATE TABLE IF NOT EXISTS batch_features (
     has_mortgage BOOLEAN DEFAULT FALSE,
     avg_monthly_spend_3m DECIMAL(12,2) DEFAULT 0,
     spend_volatility_3m DECIMAL(8,4) DEFAULT 0,
+    -- M2: Asset-side features
+    fd_closed_count_90d INTEGER DEFAULT 0,
+    fd_closure_amount_90d DECIMAL(12,2) DEFAULT 0,
+    sip_stopped_flag BOOLEAN DEFAULT FALSE,
+    sip_gaps_3m INTEGER DEFAULT 0,
+    insurance_lapse_flag BOOLEAN DEFAULT FALSE,
+    insurance_missed_payments_3m INTEGER DEFAULT 0,
+    -- M3: Employer health
+    employer_health_score DECIMAL(5,4) DEFAULT 0,
+    employer_payroll_delay_avg DECIMAL(8,2) DEFAULT 0,
+    employer_headcount_change_pct DECIMAL(8,2) DEFAULT 0,
+    -- M1: Customer segment
+    segment_type VARCHAR(30) DEFAULT 'salaried',
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
@@ -100,9 +113,19 @@ CREATE TABLE IF NOT EXISTS risk_scores (
     risk_tier VARCHAR(20) NOT NULL,  -- critical, watch, stable
     credit_score_mapped INTEGER,
     xgboost_score DECIMAL(5,4),
+    lightgbm_score DECIMAL(5,4),
     lstm_score DECIMAL(5,4),
+    tft_score DECIMAL(5,4),
     ensemble_score DECIMAL(5,4),
+    meta_learner_used BOOLEAN DEFAULT FALSE,
+    segment_type VARCHAR(30),
+    confidence_flag VARCHAR(20) DEFAULT 'full',  -- full, cold_start, limited_history
+    -- M5: Survival / time-to-event
+    p30d_default DECIMAL(5,4),
+    p60d_default DECIMAL(5,4),
+    median_tte_days INTEGER,
     top_shap_features JSONB,
+    tft_attention_weights JSONB,  -- per-timestep attention weights
     model_version VARCHAR(50),
     scored_at TIMESTAMP DEFAULT NOW()
 );
@@ -191,12 +214,44 @@ INSERT INTO merchant_risk_scores (merchant_category, risk_score, risk_category, 
     ('transfer', 0.15, 'low', 'Peer-to-peer transfers');
 
 -- Indexes for performance
-CREATE INDEX idx_transactions_customer ON transactions(customer_id);
-CREATE INDEX idx_transactions_timestamp ON transactions(timestamp);
-CREATE INDEX idx_transactions_type ON transactions(txn_type);
-CREATE INDEX idx_risk_scores_customer ON risk_scores(customer_id);
-CREATE INDEX idx_risk_scores_scored_at ON risk_scores(scored_at);
-CREATE INDEX idx_interventions_customer ON interventions(customer_id);
-CREATE INDEX idx_interventions_sent_at ON interventions(sent_at);
-CREATE INDEX idx_feedback_customer ON feedback_events(customer_id);
-CREATE INDEX idx_account_balances_customer ON account_balances(customer_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_customer ON transactions(customer_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_timestamp ON transactions(timestamp);
+CREATE INDEX IF NOT EXISTS idx_transactions_type ON transactions(txn_type);
+CREATE INDEX IF NOT EXISTS idx_risk_scores_customer ON risk_scores(customer_id);
+CREATE INDEX IF NOT EXISTS idx_risk_scores_scored_at ON risk_scores(scored_at);
+CREATE INDEX IF NOT EXISTS idx_interventions_customer ON interventions(customer_id);
+CREATE INDEX IF NOT EXISTS idx_interventions_sent_at ON interventions(sent_at);
+CREATE INDEX IF NOT EXISTS idx_feedback_customer ON feedback_events(customer_id);
+CREATE INDEX IF NOT EXISTS idx_account_balances_customer ON account_balances(customer_id);
+
+-- ============================================================
+-- New tables for M3, M10, M11
+-- ============================================================
+
+-- M3: Employer health metrics
+CREATE TABLE IF NOT EXISTS employer_health (
+    employer_name VARCHAR(200) PRIMARY KEY,
+    employer_payroll_delay_avg DECIMAL(8,2) DEFAULT 0,
+    employer_headcount_change_pct DECIMAL(8,2) DEFAULT 0,
+    employer_health_score DECIMAL(5,4) DEFAULT 0,
+    current_headcount INTEGER DEFAULT 0,
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- M10: Product action proposals
+CREATE TABLE IF NOT EXISTS product_action_proposals (
+    proposal_id SERIAL PRIMARY KEY,
+    customer_id VARCHAR(50) REFERENCES customers(customer_id),
+    action_type VARCHAR(50) NOT NULL,  -- emi_date_shift, micro_payment_split, interest_rate_review
+    proposed_params JSONB,
+    status VARCHAR(20) DEFAULT 'proposed',  -- proposed, approved, executed, rejected
+    created_at TIMESTAMP DEFAULT NOW(),
+    approved_by VARCHAR(100),
+    executed_at TIMESTAMP
+);
+
+-- Additional indexes
+CREATE INDEX IF NOT EXISTS idx_employer_health_score ON employer_health(employer_health_score);
+CREATE INDEX IF NOT EXISTS idx_product_proposals_customer ON product_action_proposals(customer_id);
+CREATE INDEX IF NOT EXISTS idx_product_proposals_status ON product_action_proposals(status);
+CREATE INDEX IF NOT EXISTS idx_batch_features_segment ON batch_features(segment_type);

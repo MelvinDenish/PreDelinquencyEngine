@@ -1,7 +1,8 @@
 """
-Rules Engine
-Determines intervention type based on risk tier transitions
-and SHAP-driven signal-aware routing.
+Rules Engine — Segment-Aware
+Determines intervention type based on risk tier transitions,
+SHAP-driven signal-aware routing, customer segment thresholds,
+cold-start caps, and product action proposals.
 """
 import os
 import sys
@@ -50,6 +51,15 @@ SHAP_INTERVENTION_MAP = {
     "gambling_lottery_spend_7d": "wellness_checkin",
     "gambling_lottery_spend_30d": "wellness_checkin",
 
+    # Asset-side features (M2)
+    "fd_premature_closures_90d": "emi_restructuring",
+    "sip_stoppages_90d": "savings_review",
+    "insurance_lapse_flag": "wellness_checkin",
+
+    # Employer health (M3)
+    "employer_payroll_delay_avg": "payment_holiday",
+    "employer_headcount_change_pct": "wellness_checkin",
+
     # Default
     "utility_payment_delay_avg": "payment_reminder",
 }
@@ -61,6 +71,18 @@ INTERVENTION_DESCRIPTIONS = {
     "budget_nudge": "Gentle spending awareness nudge with budgeting tips",
     "payment_reminder": "Friendly payment reminder before due date",
     "escalation_call": "Relationship manager direct outreach call",
+    "savings_review": "Savings & investment portfolio health review",
+}
+
+# Segment-specific risk tier thresholds
+SEGMENT_THRESHOLDS = {
+    "salaried":      {"watch": 0.50, "critical": 0.70},
+    "self_employed":  {"watch": 0.45, "critical": 0.65},
+    "gig_worker":     {"watch": 0.40, "critical": 0.60},
+    "retiree":        {"watch": 0.45, "critical": 0.70},
+    "agricultural":   {"watch": 0.40, "critical": 0.60},
+    "nri":            {"watch": 0.50, "critical": 0.70},
+    "student":        {"watch": 0.55, "critical": 0.75},
 }
 
 
@@ -98,11 +120,20 @@ def determine_intervention(
     risk_score: float,
     risk_tier: str,
     shap_drivers: list,
+    segment_type: str = "salaried",
+    is_cold_start: bool = False,
+    customer_features: dict = None,
 ) -> Optional[Dict]:
     """
-    Determine the appropriate intervention based on risk tier and SHAP drivers.
+    Determine the appropriate intervention based on risk tier, SHAP drivers,
+    customer segment, and cold-start status.
     Returns intervention dict or None if no intervention needed.
     """
+    # Cold-start cap: never route to critical interventions
+    if is_cold_start and risk_tier == "critical":
+        risk_tier = "watch"
+        logger.info(f"[RulesEngine] Cold-start cap applied for {customer_id}")
+
     # Check for tier transition
     previous_tier = check_tier_transition(customer_id, risk_tier)
     if previous_tier is None and risk_tier == "stable":
@@ -119,10 +150,26 @@ def determine_intervention(
             intervention_type = SHAP_INTERVENTION_MAP[feature_name]
             trigger_reason = f"Top risk driver: {feature_name} (SHAP: {top_driver.get('shap_value', 0):.3f})"
 
+    # Segment-specific escalation thresholds
+    seg_thresholds = SEGMENT_THRESHOLDS.get(segment_type, SEGMENT_THRESHOLDS["salaried"])
+    critical_threshold = seg_thresholds.get("critical", 0.70)
+
     # Escalate for critical tier
-    if risk_tier == "critical" and risk_score > 0.85:
+    if risk_tier == "critical" and risk_score > critical_threshold + 0.15:
         intervention_type = "escalation_call"
-        trigger_reason = f"Critical risk score ({risk_score:.2f}) - escalation required"
+        trigger_reason = f"Critical risk score ({risk_score:.2f}) for {segment_type} — escalation required"
+
+    # Generate product action proposals
+    product_actions = []
+    if customer_features and risk_tier in ("watch", "critical"):
+        try:
+            from intervention.product_actions import ProductActionEngine
+            product_engine = ProductActionEngine()
+            product_actions = product_engine.generate_proposals(
+                customer_id, customer_features, risk_score, risk_tier
+            )
+        except Exception as e:
+            logger.warning(f"[RulesEngine] Product action generation failed: {e}")
 
     return {
         "customer_id": customer_id,
@@ -130,9 +177,12 @@ def determine_intervention(
         "trigger_reason": trigger_reason,
         "risk_score": risk_score,
         "risk_tier": risk_tier,
+        "segment_type": segment_type,
+        "is_cold_start": is_cold_start,
         "shap_drivers": shap_drivers,
         "previous_tier": previous_tier,
         "description": INTERVENTION_DESCRIPTIONS.get(intervention_type, ""),
+        "product_actions": [a["action_type"] for a in product_actions],
     }
 
 
