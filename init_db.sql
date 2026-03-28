@@ -318,3 +318,105 @@ ALTER TABLE batch_features ADD COLUMN IF NOT EXISTS vendor_payment_count_90d INT
 -- Additional Phase 2 indexes
 CREATE INDEX IF NOT EXISTS idx_risk_scores_tte ON risk_scores(tte_days) WHERE tte_days IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_customers_household_id ON customers(household_id) WHERE household_id IS NOT NULL;
+
+-- ============================================================
+-- SECURITY TABLES (Phase: Production Hardening)
+-- ============================================================
+
+-- Users table (for JWT /auth/token login)
+CREATE TABLE IF NOT EXISTS users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(100) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,   -- bcrypt hash, never plaintext
+    role VARCHAR(30) NOT NULL DEFAULT 'analyst',  -- analyst, risk_officer, admin, read_only
+    email VARCHAR(200),
+    full_name VARCHAR(200),
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    last_login_at TIMESTAMPTZ,
+    CONSTRAINT users_role_check CHECK (role IN ('analyst', 'risk_officer', 'admin', 'read_only'))
+);
+CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+
+-- API Keys table (for service-to-service authentication)
+CREATE TABLE IF NOT EXISTS api_keys (
+    key_hash VARCHAR(64) PRIMARY KEY,      -- SHA-256 hash of raw key (never store raw key)
+    service_name VARCHAR(100) NOT NULL,
+    role VARCHAR(30) NOT NULL DEFAULT 'service_account',
+    description TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    last_used_at TIMESTAMPTZ,
+    expires_at TIMESTAMPTZ,
+    revoked BOOLEAN NOT NULL DEFAULT FALSE,
+    CONSTRAINT api_keys_role_check CHECK (role IN ('service_account', 'analyst', 'risk_officer', 'admin'))
+);
+CREATE INDEX IF NOT EXISTS idx_api_keys_revoked ON api_keys(revoked) WHERE revoked = FALSE;
+
+-- Audit log table (tamper-evident, INSERT-only in production)
+-- customer_id is stored as one-way SHA-256 hash — never in plaintext
+CREATE TABLE IF NOT EXISTS audit_log (
+    id BIGSERIAL PRIMARY KEY,
+    event_id UUID DEFAULT gen_random_uuid(),
+    event_type VARCHAR(50) NOT NULL,
+    actor_id VARCHAR(100),                  -- JWT sub (username) or service name
+    actor_role VARCHAR(30),
+    customer_id_token VARCHAR(64),          -- SHA-256(salt + customer_id) — non-reversible
+    action VARCHAR(200) NOT NULL,
+    outcome VARCHAR(20),                    -- SUCCESS, FAILURE, BLOCKED, PARTIAL
+    request_ip INET,
+    details JSONB,                          -- Non-PII operational context only
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_audit_actor ON audit_log(actor_id);
+CREATE INDEX IF NOT EXISTS idx_audit_customer_token ON audit_log(customer_id_token);
+CREATE INDEX IF NOT EXISTS idx_audit_created_at ON audit_log(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_event_type ON audit_log(event_type);
+-- Audit log must be retained for 5+ years (regulatory requirement)
+COMMENT ON TABLE audit_log IS 'Tamper-evident audit trail. Minimum 5-year retention per Basel III / FCA SYSC 9. No UPDATE or DELETE in production.';
+
+-- Customer consent tracking (required by GDPR Art. 6 / TCPA / FCA CONC guidelines)
+CREATE TABLE IF NOT EXISTS customer_consent (
+    id SERIAL PRIMARY KEY,
+    customer_id VARCHAR(50) REFERENCES customers(customer_id) ON DELETE CASCADE,
+    channel VARCHAR(20) NOT NULL,           -- sms, email, whatsapp, rm_call, app_push
+    consent_given BOOLEAN NOT NULL DEFAULT FALSE,
+    consent_method VARCHAR(50),             -- app_onboarding, ivr, written_form, digital_mandate
+    consent_timestamp TIMESTAMPTZ,
+    withdrawal_timestamp TIMESTAMPTZ,       -- NULL means consent is active
+    consent_version VARCHAR(20),            -- version of T&C consented to
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(customer_id, channel),
+    CONSTRAINT consent_channel_check CHECK (channel IN ('sms', 'email', 'whatsapp', 'rm_call', 'app_push', 'collector'))
+);
+CREATE INDEX IF NOT EXISTS idx_consent_customer ON customer_consent(customer_id);
+CREATE INDEX IF NOT EXISTS idx_consent_active ON customer_consent(customer_id, channel) WHERE withdrawal_timestamp IS NULL AND consent_given = TRUE;
+
+-- Add audit columns to interventions table
+ALTER TABLE interventions ADD COLUMN IF NOT EXISTS triggered_by VARCHAR(100);
+ALTER TABLE interventions ADD COLUMN IF NOT EXISTS trigger_ip INET;
+ALTER TABLE interventions ADD COLUMN IF NOT EXISTS consent_verified BOOLEAN DEFAULT FALSE;
+
+-- Default admin user (password must be changed immediately on first login)
+-- Password hash is bcrypt of 'ChangeMe@2024!' — MUST be changed before production
+INSERT INTO users (username, password_hash, role, email, full_name)
+VALUES (
+    'admin',
+    '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBACG0qsMcCxse',
+    'admin',
+    'admin@barclays.in',
+    'PDI System Administrator'
+) ON CONFLICT (username) DO NOTHING;
+
+COMMENT ON TABLE users IS 'Default admin password is ChangeMe@2024! — change immediately on first login.';
+
+-- Seed consent data for existing customers (opt-in assumed for demo; in production this requires explicit consent)
+INSERT INTO customer_consent (customer_id, channel, consent_given, consent_method, consent_timestamp, consent_version)
+SELECT customer_id, 'sms', TRUE, 'demo_seed', NOW(), 'v1.0'
+FROM customers
+ON CONFLICT (customer_id, channel) DO NOTHING;
+
+INSERT INTO customer_consent (customer_id, channel, consent_given, consent_method, consent_timestamp, consent_version)
+SELECT customer_id, 'email', TRUE, 'demo_seed', NOW(), 'v1.0'
+FROM customers
+ON CONFLICT (customer_id, channel) DO NOTHING;

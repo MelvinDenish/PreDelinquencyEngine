@@ -44,7 +44,7 @@ class ABHoldout:
         """
         # Hash customer_id + experiment_id to get stable random-like assignment
         hash_input = f"{customer_id}:{experiment_id}"
-        hash_val = int(hashlib.md5(hash_input.encode()).hexdigest(), 16)
+        hash_val = int(hashlib.md5(hash_input.encode(), usedforsecurity=False).hexdigest(), 16)  # nosec B324
         bucket = (hash_val % 100) / 100.0
         return bucket < self.holdout_fraction
 

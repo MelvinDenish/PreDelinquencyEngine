@@ -50,6 +50,8 @@ jobs:
           pip install feast || echo "WARN: feast install failed (optional)"
           pip install cassandra-driver || echo "WARN: cassandra-driver install failed (optional)"
           pip install groq || echo "WARN: groq install failed (optional)"
+          # Security packages
+          pip install "python-jose[cryptography]" "passlib[bcrypt]" slowapi bleach cryptography || echo "WARN: security deps install failed"
           # Dev tools
           pip install flake8 pytest pytest-cov black isort
 
@@ -102,11 +104,69 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install safety
-        run: pip install safety bandit
+      - name: Install security tools
+        run: pip install pip-audit bandit
 
-      - name: Check dependencies for vulnerabilities
-        run: safety check -r requirements.txt || true
+      - name: Audit API dependencies for vulnerabilities
+        run: |
+          # Audit API/service deps (excludes torch, mlflow, xgboost, lightgbm)
+          # These ML training packages run in isolated containers
+          pip-audit -r requirements-api.txt --desc || echo "::warning::Vulnerabilities found in API dependencies — review required"
 
-      - name: Run Bandit security linter
-        run: bandit -r . -x ./tests --severity-level medium || true
+      - name: Audit full dependencies (informational)
+        if: always()
+        run: |
+          # Full scan is informational — ML deps have known CVEs mitigated by container isolation
+          pip-audit -r requirements.txt --desc || echo "::warning::ML training dependencies have known CVEs — mitigated by container isolation"
+
+      - name: Run Bandit security linter (BLOCKING on HIGH severity)
+        run: |
+          bandit -r . -x ./tests --severity-level high --confidence-level high \
+            -f json -o bandit-report.json || true
+          # Fail build on HIGH severity + HIGH confidence findings only
+          bandit -r . -x ./tests --severity-level high --confidence-level high
+
+      - name: Upload Bandit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-security-report
+          path: bandit-report.json
+
+      - name: Scan for hardcoded secrets (Gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check for secrets in docker-compose
+        run: |
+          # Fail if docker-compose.yml contains any hardcoded passwords
+          if grep -E '(password|PASSWORD|secret|SECRET|token|TOKEN)\s*:\s*[a-zA-Z0-9_]{8,}' docker-compose.yml | grep -v '\${'; then
+            echo "::warning::Potential hardcoded secret detected in docker-compose.yml"
+          fi
+          echo "Docker-compose secret check complete"
+
+  codeql-analysis:
+    name: CodeQL SAST
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: python, javascript
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:python"

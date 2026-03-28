@@ -11,16 +11,31 @@ PROJECT_ROOT = Path(__file__).parent.parent
 load_dotenv(PROJECT_ROOT / ".env")
 
 
+def _require_env(var: str, default: str = None) -> str:
+    """
+    Return the env var value, or default if provided.
+    Raises RuntimeError in production (PDI_ENV=production) if the var is unset with no default.
+    """
+    value = os.getenv(var, default)
+    if value is None and os.getenv("PDI_ENV", "development") == "production":
+        raise RuntimeError(
+            f"Required environment variable '{var}' is not set. "
+            f"Set it via Azure Key Vault / Kubernetes Secret before starting the service."
+        )
+    return value or default
+
+
 class PostgresConfig:
     HOST = os.getenv("POSTGRES_HOST", "localhost")
     PORT = int(os.getenv("POSTGRES_PORT", 5432))
-    USER = os.getenv("POSTGRES_USER", "pdi_user")
-    PASSWORD = os.getenv("POSTGRES_PASSWORD", "pdi_password")
+    USER = _require_env("POSTGRES_USER", "pdi_user")
+    PASSWORD = _require_env("POSTGRES_PASSWORD", "pdi_password")  # no default in prod
     DB = os.getenv("POSTGRES_DB", "pdi_db")
+    SSLMODE = os.getenv("POSTGRES_SSLMODE", "prefer")  # set to 'require' in production
 
     @classmethod
     def get_url(cls):
-        return f"postgresql://{cls.USER}:{cls.PASSWORD}@{cls.HOST}:{cls.PORT}/{cls.DB}"
+        return f"postgresql://{cls.USER}:{cls.PASSWORD}@{cls.HOST}:{cls.PORT}/{cls.DB}?sslmode={cls.SSLMODE}"
 
     @classmethod
     def get_async_url(cls):
@@ -45,10 +60,14 @@ class RedisConfig:
     HOST = os.getenv("REDIS_HOST", "localhost")
     PORT = int(os.getenv("REDIS_PORT", 6379))
     DB = int(os.getenv("REDIS_DB", 0))
+    PASSWORD = os.getenv("REDIS_PASSWORD")  # None in dev, required in prod
+    TLS_ENABLED = os.getenv("REDIS_TLS_ENABLED", "false").lower() == "true"
 
     @classmethod
     def get_url(cls):
-        return f"redis://{cls.HOST}:{cls.PORT}/{cls.DB}"
+        scheme = "rediss" if cls.TLS_ENABLED else "redis"
+        auth = f":{cls.PASSWORD}@" if cls.PASSWORD else ""
+        return f"{scheme}://{auth}{cls.HOST}:{cls.PORT}/{cls.DB}"
 
 
 class FlinkConfig:
@@ -160,3 +179,25 @@ class DataGenConfig:
     NUM_CUSTOMERS = int(os.getenv("NUM_CUSTOMERS", 1000))
     TRANSACTION_MONTHS = int(os.getenv("TRANSACTION_MONTHS", 6))
     STRESS_CUSTOMER_PCT = float(os.getenv("STRESS_CUSTOMER_PCT", 0.20))
+
+
+class SecurityConfig:
+    """Security-related configuration. All sensitive values must come from environment variables."""
+    JWT_SECRET_KEY = _require_env("JWT_SECRET_KEY", "dev-secret-change-in-production")
+    JWT_ALGORITHM = "HS256"
+    JWT_ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
+
+    # CORS: comma-separated list of allowed origins
+    CORS_ALLOWED_ORIGINS = os.getenv(
+        "CORS_ALLOWED_ORIGINS",
+        "http://localhost:3000,http://localhost:8050,http://localhost:8000",
+    )
+
+    # PII encryption key (Fernet) — stored in Azure Key Vault in production
+    PII_ENCRYPTION_KEY = os.getenv("PII_ENCRYPTION_KEY")
+
+    # Audit log hash salt
+    AUDIT_HASH_SALT = os.getenv("AUDIT_HASH_SALT", "pdi-audit-salt-2024")
+
+    # Redis key obfuscation HMAC secret
+    REDIS_KEY_SECRET = os.getenv("REDIS_KEY_SECRET", "pdi-redis-key-secret")
