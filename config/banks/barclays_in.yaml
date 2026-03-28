@@ -90,9 +90,9 @@ segment_thresholds:
     watch: 0.50
     critical: 0.72
 
-# Regulatory flags (RBI-compliant)
+# Regulatory flags (FCA / PRA / GDPR compliant)
 regulatory_flags:
-  rbi_fair_practice: true
+  fca_fair_practice: true
   cooldown_hours: 24
   max_sms_per_day: 3
   max_rm_calls_per_week: 2

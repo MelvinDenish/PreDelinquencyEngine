@@ -48,9 +48,9 @@ services:
     image: postgres:16
     container_name: pdi-postgres
     environment:
-      POSTGRES_USER: pdi_user
-      POSTGRES_PASSWORD: pdi_password
-      POSTGRES_DB: pdi_db
+      POSTGRES_USER: ${POSTGRES_USER:-pdi_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-pdi_db}
     ports:
       - "5432:5432"
     volumes:
@@ -177,7 +177,7 @@ services:
       - "5000:5000"
     entrypoint: ["bash", "-c"]
     environment:
-      MLFLOW_DB_URI: postgresql://pdi_user:pdi_password@pdi-postgres:5432/mlflow_db
+      MLFLOW_DB_URI: postgresql://${POSTGRES_USER:-pdi_user}:${POSTGRES_PASSWORD}@pdi-postgres:5432/mlflow_db
     command:
       - |
         apt-get update && apt-get install -y --no-install-recommends libpq-dev gcc && \
@@ -203,8 +203,8 @@ services:
     ports:
       - "3000:3000"
     environment:
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: pdi_admin
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD must be set in .env}
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_DASHBOARDS_MIN_REFRESH_INTERVAL: 5s
     volumes:
@@ -226,12 +226,12 @@ services:
     ports:
       - "8088:8088"
     environment:
-      SUPERSET_SECRET_KEY: pdi-superset-secret-key-change-in-production
+      SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY:?SUPERSET_SECRET_KEY must be set in .env}
       SUPERSET_LOAD_EXAMPLES: "no"
-      DATABASE_DB: pdi_db
+      DATABASE_DB: ${POSTGRES_DB:-pdi_db}
       DATABASE_HOST: pdi-postgres
-      DATABASE_PASSWORD: pdi_password
-      DATABASE_USER: pdi_user
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD}
+      DATABASE_USER: ${POSTGRES_USER:-pdi_user}
       DATABASE_PORT: 5432
       REDIS_HOST: pdi-redis
       REDIS_PORT: 6379
@@ -264,9 +264,9 @@ services:
       - "9000:9000"   # Native TCP interface
     environment:
       CLICKHOUSE_DB: pdi_analytics
-      CLICKHOUSE_USER: pdi_user
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-pdi_user}
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
-      CLICKHOUSE_PASSWORD: pdi_password
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-pdi_password}
     volumes:
       - pdi-clickhouse-data:/var/lib/clickhouse
     networks:
@@ -341,16 +341,16 @@ services:
       - "8085:8080"
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://pdi_user:pdi_password@pdi-postgres:5432/pdi_db
-      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY}
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER:-pdi_user}:${POSTGRES_PASSWORD}@pdi-postgres:5432/${POSTGRES_DB:-pdi_db}
+      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:?AIRFLOW_FERNET_KEY must be set in .env}
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       AIRFLOW__API__AUTH_BACKENDS: "airflow.api.auth.backend.basic_auth"
-      AIRFLOW__WEBSERVER__SECRET_KEY: "pdi-airflow-secret"
+      AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_WEBSERVER_SECRET_KEY:?AIRFLOW_WEBSERVER_SECRET_KEY must be set in .env}
       _AIRFLOW_DB_MIGRATE: "true"
       _AIRFLOW_WWW_USER_CREATE: "true"
-      _AIRFLOW_WWW_USER_USERNAME: admin
-      _AIRFLOW_WWW_USER_PASSWORD: admin
+      _AIRFLOW_WWW_USER_USERNAME: ${AIRFLOW_ADMIN_USER:-admin}
+      _AIRFLOW_WWW_USER_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD:?AIRFLOW_ADMIN_PASSWORD must be set in .env}
       PYTHONPATH: /opt/airflow/dags:/app
     volumes:
       - ./airflow/dags:/opt/airflow/dags
@@ -358,7 +358,7 @@ services:
     command: >
       bash -c "
         airflow db migrate &&
-        airflow users create --username admin --password admin --firstname Admin --lastname PDI --role Admin --email admin@pdi.local 2>/dev/null || true &&
+        airflow users create --username ${AIRFLOW_ADMIN_USER:-admin} --password ${AIRFLOW_ADMIN_PASSWORD} --firstname Admin --lastname PDI --role Admin --email admin@pdi.local 2>/dev/null || true &&
         airflow scheduler &
         airflow webserver
       "
@@ -391,9 +391,10 @@ services:
     environment:
       POSTGRES_HOST: pdi-postgres
       POSTGRES_PORT: "5432"
-      POSTGRES_USER: pdi_user
-      POSTGRES_PASSWORD: pdi_password
-      POSTGRES_DB: pdi_db
+      POSTGRES_USER: ${POSTGRES_USER:-pdi_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-pdi_db}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?JWT_SECRET_KEY must be set in .env}
       REDIS_HOST: pdi-redis
       REDIS_PORT: "6379"
       KAFKA_BOOTSTRAP_SERVERS: pdi-kafka:9092
@@ -455,8 +456,8 @@ services:
       - "5678:5678"
     environment:
       - N8N_BASIC_AUTH_ACTIVE=true
-      - N8N_BASIC_AUTH_USER=admin
-      - N8N_BASIC_AUTH_PASSWORD=admin
+      - N8N_BASIC_AUTH_USER=${N8N_ADMIN_USER:-admin}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_ADMIN_PASSWORD:?N8N_ADMIN_PASSWORD must be set in .env}
       - WEBHOOK_URL=http://localhost:5678/
       - N8N_HOST=0.0.0.0
       - N8N_PORT=5678

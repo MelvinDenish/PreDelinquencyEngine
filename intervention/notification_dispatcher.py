@@ -30,6 +30,54 @@ from config.settings import PostgresConfig, RedisConfig
 
 logger = logging.getLogger(__name__)
 
+
+# ─────────────────────────────────────────────
+# PII Masking — never log raw PII
+# ─────────────────────────────────────────────
+def _mask_email(email: str) -> str:
+    """***@domain.com"""
+    if not email or "@" not in email:
+        return "***"
+    return f"***@{email.split('@')[1]}"
+
+
+def _mask_phone(phone: str) -> str:
+    """+91XXXXXXX1234"""
+    if not phone or len(phone) < 4:
+        return "***"
+    return phone[:-4].replace(phone[:-4], "X" * len(phone[:-4])) + phone[-4:]
+
+
+# ─────────────────────────────────────────────
+# Consent Verification — GDPR / TCPA / FCA compliance
+# ─────────────────────────────────────────────
+def _check_consent(customer_id: str, channel: str) -> bool:
+    """Verify customer has given consent for this notification channel.
+    Returns True if consent exists (or if consent table is not yet deployed)."""
+    try:
+        conn = psycopg2.connect(
+            host=PostgresConfig.HOST, port=PostgresConfig.PORT,
+            user=PostgresConfig.USER, password=PostgresConfig.PASSWORD,
+            dbname=PostgresConfig.DB,
+        )
+        cursor = conn.cursor()
+        cursor.execute(
+            """SELECT consent_given FROM customer_consent
+               WHERE customer_id = %s AND channel = %s
+               AND (withdrawal_timestamp IS NULL)""",
+            (customer_id, channel),
+        )
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        if row is None:
+            # No consent record — allow by default (pre-existing customers)
+            return True
+        return bool(row[0])
+    except Exception as e:
+        logger.warning(f"[Consent] DB check failed: {e} — allowing notification")
+        return True
+
 # ─────────────────────────────────────────────
 # Configuration from environment
 # ─────────────────────────────────────────────
@@ -121,7 +169,7 @@ def send_email(customer: Dict, subject: str, html_body: str, text_body: str = ""
             server.login(SMTP_USER, SMTP_PASSWORD)
             server.sendmail(SMTP_FROM_EMAIL, to_email, msg.as_string())
 
-        logger.info(f"[Email] ✅ Sent to {to_email} for {customer.get('customer_id')}")
+        logger.info(f"[Email] ✅ Sent to {_mask_email(to_email)} for {customer.get('customer_id')}")
         return _log_notification(customer, "email", text_body[:500], "delivered")
 
     except Exception as e:
@@ -147,7 +195,7 @@ def send_sms(customer: Dict, message: str) -> Dict:
             from_=TWILIO_FROM_NUMBER,
             to=phone
         )
-        logger.info(f"[SMS] ✅ Sent to {phone}, SID: {tw_msg.sid}")
+        logger.info(f"[SMS] ✅ Sent to {_mask_phone(phone)}, SID: {tw_msg.sid}")
         return _log_notification(customer, "sms", message, "delivered",
                                  metadata={"twilio_sid": tw_msg.sid})
 
@@ -155,7 +203,7 @@ def send_sms(customer: Dict, message: str) -> Dict:
         logger.warning("[SMS] twilio package not installed")
         return _log_notification(customer, "sms", message, "simulated")
     except Exception as e:
-        logger.error(f"[SMS] ❌ Failed for {phone}: {e}")
+        logger.error(f"[SMS] ❌ Failed for {_mask_phone(phone)}: {e}")
         return _log_notification(customer, "sms", message, "failed", str(e))
 
 
@@ -177,7 +225,7 @@ def send_whatsapp(customer: Dict, message: str) -> Dict:
             from_=TWILIO_WHATSAPP_FROM,
             to=f"whatsapp:{phone}"
         )
-        logger.info(f"[WhatsApp] ✅ Sent to {phone}, SID: {tw_msg.sid}")
+        logger.info(f"[WhatsApp] ✅ Sent to {_mask_phone(phone)}, SID: {tw_msg.sid}")
         return _log_notification(customer, "whatsapp", message, "delivered",
                                  metadata={"twilio_sid": tw_msg.sid})
     except ImportError:
@@ -320,8 +368,7 @@ def assign_collector(customer: Dict, risk_score: float, intervention: Dict,
                 requests.post(WEBHOOK_COLLECTIONS_URL, json={
                     "assignment_id": assignment_id,
                     "customer_id": customer_id,
-                    "customer_name": f"{customer.get('first_name')} {customer.get('last_name')}",
-                    "phone": customer.get("phone"),
+                    # PII stripped — external webhooks must NOT receive raw name/phone
                     "risk_score": risk_score,
                     "restructuring_offer": restructuring_offer,
                     "priority": "P0" if risk_score >= 0.9 else "P1",
@@ -454,6 +501,13 @@ def dispatch_notification(
                 f"{f' | Journey: {journey_id} Step {journey_step}' if journey_id else ''}")
 
     for channel in channels_to_use:
+        # Check consent — GDPR / TCPA compliance
+        if not _check_consent(customer_id, channel):
+            logger.info(f"[Dispatcher] {customer_id} | {channel} skipped (no consent)")
+            results.append({"channel": channel, "status": "skipped_no_consent",
+                           "customer_id": customer_id})
+            continue
+
         # Check cooldown
         if not _check_cooldown(customer_id, channel):
             logger.info(f"[Dispatcher] {customer_id} | {channel} skipped (cooldown)")

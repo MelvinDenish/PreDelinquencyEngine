@@ -25,17 +25,30 @@ jobs:
       - name: Login to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
+      - name: Set image name
+        id: image
+        run: |
+          IMAGE=$(echo "${{ env.DOCKER_REGISTRY }}/${{ github.repository }}/${{ env.DOCKER_IMAGE }}" | tr '[:upper:]' '[:lower:]')
+          echo "full=${IMAGE}:${{ github.sha }}" >> $GITHUB_OUTPUT
+          echo "base=${IMAGE}" >> $GITHUB_OUTPUT
+
       - name: Build Docker image
         run: |
-          IMAGE_TAG=$(echo "${{ env.DOCKER_REGISTRY }}/${{ github.repository }}/${{ env.DOCKER_IMAGE }}" | tr '[:upper:]' '[:lower:]')
-          echo "Building image: ${IMAGE_TAG}"
-          docker build -t ${IMAGE_TAG}:${{ github.sha }} -t ${IMAGE_TAG}:latest .
+          docker build -t ${{ steps.image.outputs.full }} -t ${{ steps.image.outputs.base }}:latest .
+
+      - name: Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: '${{ steps.image.outputs.full }}'
+          format: 'table'
+          exit-code: '0'
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
 
       - name: Push Docker image
         run: |
-          IMAGE_TAG=$(echo "${{ env.DOCKER_REGISTRY }}/${{ github.repository }}/${{ env.DOCKER_IMAGE }}" | tr '[:upper:]' '[:lower:]')
-          docker push ${IMAGE_TAG}:${{ github.sha }}
-          docker push ${IMAGE_TAG}:latest
+          docker push ${{ steps.image.outputs.full }}
+          docker push ${{ steps.image.outputs.base }}:latest
 
   deploy-to-k8s:
     name: Deploy to Kubernetes

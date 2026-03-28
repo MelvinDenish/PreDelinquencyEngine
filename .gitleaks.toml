@@ -1,0 +1,48 @@
+title = "PDI Engine Secret Scanning Rules"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "pdi-hardcoded-password"
+description = "Hardcoded PDI default password"
+regex = '''(?i)(password|passwd)\s*=\s*["']pdi_password["']'''
+tags = ["password", "pdi"]
+
+[[rules]]
+id = "twilio-sid"
+description = "Twilio Account SID"
+regex = '''AC[a-f0-9]{32}'''
+tags = ["twilio"]
+
+[[rules]]
+id = "twilio-auth-token"
+description = "Twilio Auth Token"
+regex = '''(?i)twilio[_\-]?auth[_\-]?token\s*[=:]\s*["']?[a-f0-9]{32}["']?'''
+tags = ["twilio"]
+
+[[rules]]
+id = "groq-api-key"
+description = "GROQ API Key"
+regex = '''(?i)groq[_\-]?api[_\-]?key\s*[=:]\s*["']?gsk_[a-zA-Z0-9]{48,}["']?'''
+tags = ["groq"]
+
+[[rules]]
+id = "airflow-secret-key"
+description = "Airflow Secret Key"
+regex = '''(?i)airflow[_\-]?secret[_\-]?key\s*[=:]\s*["'][^"']{8,}["']'''
+tags = ["airflow"]
+
+[[rules]]
+id = "grafana-admin-password"
+description = "Grafana Admin Password"
+regex = '''(?i)gf[_\-]security[_\-]admin[_\-]password\s*[=:]\s*["']?[^\s"']+["']?'''
+tags = ["grafana"]
+
+[allowlist]
+paths = [
+    '''\.env\.example$''',
+    '''.*\.md$''',
+    '''tests?/fixtures/''',
+    '''tests?/data/''',
+]
