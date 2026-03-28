@@ -12,7 +12,7 @@ faker==33.1.0
 # ─────────────────────────────────────────────
 # ML Training - XGBoost, LightGBM, PyTorch, scikit-learn
 # ─────────────────────────────────────────────
-xgboost==2.1.3
+xgboost==3.2.0
 lightgbm==4.5.0
 torch==2.6.0
 scikit-learn==1.6.0
