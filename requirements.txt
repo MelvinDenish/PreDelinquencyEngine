@@ -8,6 +8,7 @@ kafka-python==2.0.2
 pydantic==2.10.4
 python-dotenv==1.0.1
 faker==33.1.0
+python-multipart==0.0.22
 
 # ─────────────────────────────────────────────
 # ML Training - XGBoost, LightGBM, PyTorch, scikit-learn

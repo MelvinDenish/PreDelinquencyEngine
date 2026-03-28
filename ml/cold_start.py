@@ -87,7 +87,6 @@ class ColdStartScorer:
             "confidence_flag": "cold_start",
             "xgboost_score": round(risk_score, 4),
             "tft_score": None,
-            "lstm_score": None,
             "meta_learner_used": False,
         }
 

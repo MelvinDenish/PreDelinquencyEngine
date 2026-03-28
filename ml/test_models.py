@@ -40,7 +40,7 @@ from config.settings import ModelConfig, PostgresConfig
 from ml.dataset_builder import build_training_dataset, build_temporal_dataset
 from ml.xgboost_model import XGBoostDelinquencyModel
 from ml.lightgbm_model import LightGBMDelinquencyModel
-from ml.lstm_model import LSTMDelinquencyModel
+# LSTM removed — 3-model ensemble (XGBoost + LightGBM + TFT)
 from ml.ensemble import EnsembleScorer
 
 logging.basicConfig(level=logging.INFO)
