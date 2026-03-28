@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.14-slim
 
 # Security: run as non-root user
 RUN groupadd -r appgroup && useradd -r -g appgroup -u 1001 appuser
