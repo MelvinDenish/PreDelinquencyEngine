@@ -87,7 +87,7 @@ cassandra-driver==3.29.2
 # ─────────────────────────────────────────────
 # Prometheus — Metrics for FastAPI
 # ─────────────────────────────────────────────
-prometheus-fastapi-instrumentator==7.0.2
+prometheus-fastapi-instrumentator==7.1.0
 prometheus-client==0.21.1
 
 # ─────────────────────────────────────────────
