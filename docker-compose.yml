@@ -388,7 +388,6 @@ services:
         condition: service_healthy
     ports:
       - "8000:8000"
-      - "8050:8050"
     environment:
       POSTGRES_HOST: pdi-postgres
       POSTGRES_PORT: "5432"
@@ -413,6 +412,35 @@ services:
     volumes:
       - ./models:/app/models
       - pdi-app-data:/app/data
+    networks:
+      - pdi-network
+    restart: on-failure
+
+  pdi-dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pdi-dashboard
+    command: ["python", "main.py", "dashboard"]
+    depends_on:
+      pdi-postgres:
+        condition: service_healthy
+      pdi-redis:
+        condition: service_healthy
+    ports:
+      - "8050:8050"
+    environment:
+      POSTGRES_HOST: pdi-postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: pdi_user
+      POSTGRES_PASSWORD: pdi_password
+      POSTGRES_DB: pdi_db
+      REDIS_HOST: pdi-redis
+      REDIS_PORT: "6379"
+      # Give it access to the API URL if it needs it
+      API_URL: http://pdi-app:8000
+    volumes:
+      - ./models:/app/models
     networks:
       - pdi-network
     restart: on-failure

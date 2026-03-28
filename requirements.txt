@@ -56,10 +56,11 @@ uvicorn==0.34.0
 httpx==0.28.1
 
 # ─────────────────────────────────────────────
-# Intervention Engine - Celery, Apprise
+# Intervention Engine - Celery, Apprise, Twilio
 # ─────────────────────────────────────────────
 celery==5.4.0
 apprise==1.9.1
+twilio==9.0.0
 
 # ─────────────────────────────────────────────
 # Visualization - Plotly Dash
