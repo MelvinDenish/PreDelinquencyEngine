@@ -104,3 +104,20 @@ groq==0.13.0
 # Pin pyarrow to avoid backtracking
 # ─────────────────────────────────────────────
 pyarrow==18.1.0
+
+# ─────────────────────────────────────────────
+# Security (Phase: Production Hardening)
+# ─────────────────────────────────────────────
+# JWT authentication
+python-jose[cryptography]==3.3.0
+# Password hashing
+passlib[bcrypt]==1.7.4
+# Rate limiting
+slowapi==0.1.9
+# HTML sanitization (XSS prevention on /notify)
+bleach==6.1.0
+# Field-level PII encryption
+cryptography==43.0.3
+# Azure Key Vault (production secrets management)
+azure-keyvault-secrets==4.8.0
+azure-identity==1.17.1

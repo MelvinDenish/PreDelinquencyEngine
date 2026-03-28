@@ -1,0 +1,146 @@
+---
+# Allow HTTPS traffic INTO the scoring service ONLY from the ingress controller.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-scoring-ingress
+  namespace: pdi-engine
+spec:
+  podSelector:
+    matchLabels:
+      app: pdi-scoring
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8000
+  egress:
+    # Allow to PostgreSQL
+    - to:
+        - podSelector:
+            matchLabels:
+              app: pdi-postgres
+      ports:
+        - protocol: TCP
+          port: 5432
+    # Allow to Redis
+    - to:
+        - podSelector:
+            matchLabels:
+              app: pdi-redis
+      ports:
+        - protocol: TCP
+          port: 6379
+    # Allow to Kafka
+    - to:
+        - podSelector:
+            matchLabels:
+              app: pdi-kafka
+      ports:
+        - protocol: TCP
+          port: 9092
+    # Allow to Cassandra
+    - to:
+        - podSelector:
+            matchLabels:
+              app: pdi-cassandra
+      ports:
+        - protocol: TCP
+          port: 9042
+    # Allow DNS resolution
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+---
+# PostgreSQL: only accessible from scoring service, celery worker, dashboard
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-postgres-access
+  namespace: pdi-engine
+spec:
+  podSelector:
+    matchLabels:
+      app: pdi-postgres
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  - pdi-scoring
+                  - pdi-celery-worker
+                  - pdi-dashboard
+                  - pdi-airflow
+                  - pdi-mlflow
+      ports:
+        - protocol: TCP
+          port: 5432
+
+---
+# Redis: only accessible from scoring service and celery worker
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-redis-access
+  namespace: pdi-engine
+spec:
+  podSelector:
+    matchLabels:
+      app: pdi-redis
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  - pdi-scoring
+                  - pdi-celery-worker
+      ports:
+        - protocol: TCP
+          port: 6379
+
+---
+# Kafka: only accessible from scoring service and stream processors
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-kafka-access
+  namespace: pdi-engine
+spec:
+  podSelector:
+    matchLabels:
+      app: pdi-kafka
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  - pdi-scoring
+                  - pdi-flink-jobmanager
+                  - pdi-flink-taskmanager
+                  - pdi-debezium
+      ports:
+        - protocol: TCP
+          port: 9092
+        - protocol: TCP
+          port: 29092
