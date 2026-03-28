@@ -102,22 +102,21 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install safety
-        run: pip install safety bandit
+      - name: Install security tools
+        run: pip install pip-audit bandit
 
-      - name: Check API dependencies for vulnerabilities (BLOCKING)
+      - name: Audit API dependencies for vulnerabilities (BLOCKING)
         run: |
-          pip install safety
-          # Strict check on API/service deps only (excludes torch, mlflow, xgboost, lightgbm)
+          # Strict audit on API/service deps only (excludes torch, mlflow, xgboost, lightgbm)
           # ML training packages run in isolated containers — checked separately below
-          safety check -r requirements-api.txt
+          pip-audit -r requirements-api.txt --desc
 
-      - name: Check ML training dependencies (INFORMATIONAL)
+      - name: Audit ML training dependencies (INFORMATIONAL)
         if: always()
         run: |
           # Full scan is informational — torch/mlflow have known CVEs that are
           # mitigated by container isolation (not exposed to external traffic)
-          safety check -r requirements.txt || echo "::warning::ML training dependencies have known CVEs — see container isolation notes in requirements-api.txt"
+          pip-audit -r requirements.txt --desc || echo "::warning::ML training dependencies have known CVEs — see container isolation notes in requirements-api.txt"
 
       - name: Run Bandit security linter (BLOCKING on HIGH severity)
         run: |
