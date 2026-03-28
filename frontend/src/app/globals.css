@@ -1,127 +1,226 @@
 @import "tailwindcss";
 
-/* ─── Barclays Brand Design Tokens ─────────────────────────────────────────── */
+/* ─── Barclays PDI — Institutional Command Centre ─────────────────────────── */
+/* Design Language: Dense data dashboard. Bloomberg meets Palantir.            */
+/* Dark surfaces for sustained viewing. High-contrast data. Zero decoration.   */
+
 :root {
-  /* Barclays brand palette */
-  --barclays-navy:       #002C6C;
-  --barclays-blue:       #00AEEF;
-  --barclays-light-blue: #6EC6E6;
-  --barclays-dark-navy:  #00395D;
+  /* Barclays institutional palette */
+  --navy:        #0B1929;
+  --navy-mid:    #132337;
+  --navy-light:  #1A2E44;
+  --navy-border: #243B53;
+  --accent:      #00AEEF;
+  --accent-dim:  #0077B6;
 
-  /* Surface colours */
-  --bg-dark:    #060c18;
-  --bg-surface: #0A1628;
-  --bg-card:    rgba(13, 31, 53, 0.90);
-  --border:     rgba(0, 174, 239, 0.12);
+  /* Surfaces */
+  --bg-base:    #0B1929;
+  --bg-raised:  #132337;
+  --bg-overlay: #1A2E44;
+  --border:     #243B53;
+  --border-dim: #1C3148;
 
-  /* Semantic colours — keep these; used throughout */
-  --cyan:   #00AEEF;   /* ← now Barclays blue */
-  --purple: #5B21B6;
-  --pink:   #EC4899;
-  --green:  #22C55E;
-  --amber:  #F59E0B;
-  --red:    #EF4444;
+  /* Semantic */
+  --green:  #34D399;
+  --amber:  #FBBF24;
+  --red:    #F87171;
+  --green-dim: #065F46;
+  --amber-dim: #78350F;
+  --red-dim:   #7F1D1D;
 
-  /* Text */
-  --text-primary:  #F0F6FF;
-  --text-muted:    #94A3B8;
-  --text-subtle:   #4B6278;
+  /* Typography */
+  --text-0: #F8FAFC;
+  --text-1: #E2E8F0;
+  --text-2: #94A3B8;
+  --text-3: #64748B;
+  --text-4: #475569;
 }
 
-* { box-sizing: border-box; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; }
 
-html { scroll-behavior: smooth; }
+html { scroll-behavior: smooth; -webkit-font-smoothing: antialiased; }
 
 body {
-  background: var(--bg-dark);
-  background-image:
-    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(0, 44, 108, 0.35) 0%, transparent 60%),
-    radial-gradient(ellipse 40% 30% at 80% 80%, rgba(0, 57, 93, 0.20) 0%, transparent 60%);
-  color: var(--text-primary);
-  font-family: 'Inter', system-ui, sans-serif;
+  background: var(--bg-base);
+  color: var(--text-1);
+  font-family: 'DM Sans', system-ui, sans-serif;
   min-height: 100vh;
   overflow-x: hidden;
+  font-size: 14px;
+  line-height: 1.5;
 }
 
-/* Scrollbar */
-::-webkit-scrollbar { width: 6px; }
+/* Scrollbar — near-invisible */
+::-webkit-scrollbar { width: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.15); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-4); }
 
-/* Pipeline node glow animation */
-@keyframes nodeGlow {
-  0%, 100% { box-shadow: 0 0 8px rgba(0, 212, 255, 0.15); }
-  50% { box-shadow: 0 0 24px rgba(0, 212, 255, 0.35); }
-}
-@keyframes pulseDot {
-  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(0, 230, 118, 0.4); }
-  50% { opacity: 0.7; box-shadow: 0 0 0 6px rgba(0, 230, 118, 0); }
+/* ─── Animations — functional only ─── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 @keyframes slideIn {
-  from { opacity: 0; transform: translateX(-12px); }
-  to { opacity: 1; transform: translateX(0); }
+  from { opacity: 0; transform: translateX(-8px); }
+  to   { opacity: 1; transform: translateX(0); }
 }
-@keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-@keyframes flowPulse {
-  0% { opacity: 0.3; }
-  50% { opacity: 1; }
-  100% { opacity: 0.3; }
+@keyframes pulse-subtle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
 }
 
-.animate-node-glow { animation: nodeGlow 2s ease-in-out infinite; }
-.animate-pulse-dot { animation: pulseDot 1.5s infinite; }
-.animate-slide-in { animation: slideIn 0.3s ease; }
-.animate-fade-in-up { animation: fadeInUp 0.4s ease; }
-.animate-flow-pulse { animation: flowPulse 2s ease-in-out infinite; }
+.animate-fade-in-up { animation: fadeIn 0.2s ease-out; }
+.animate-slide-in   { animation: slideIn 0.15s ease-out; }
+.animate-node-glow  { box-shadow: 0 0 0 2px rgba(0,174,239,0.4), 0 0 12px rgba(0,174,239,0.15); }
+.animate-pulse-dot  { animation: pulse-subtle 2s infinite; }
+.animate-flow-pulse { opacity: 0.6; }
 
-/* Gradient text — Barclays blue to light blue */
+/* ─── Shimmer / Skeleton Loading ─── */
+@keyframes shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, var(--bg-raised) 25%, var(--navy-light) 50%, var(--bg-raised) 75%);
+  background-size: 800px 100%;
+  animation: shimmer 1.5s infinite linear;
+  border-radius: 4px;
+}
+.skeleton-card {
+  background: linear-gradient(90deg, var(--bg-raised) 25%, var(--navy-light) 50%, var(--bg-raised) 75%);
+  background-size: 800px 100%;
+  animation: shimmer 1.5s infinite linear;
+  border-radius: 6px;
+  border: 1px solid var(--border-dim);
+}
+
+/* ─── Toast Notifications ─── */
+.toast-container {
+  position: fixed;
+  top: 68px;
+  right: 20px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+.toast {
+  pointer-events: auto;
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+  min-width: 280px;
+  max-width: 400px;
+}
+.toast-success {
+  background: rgba(52,211,153,0.15);
+  border: 1px solid rgba(52,211,153,0.35);
+  color: var(--green);
+}
+.toast-info {
+  background: rgba(0,174,239,0.15);
+  border: 1px solid rgba(0,174,239,0.35);
+  color: var(--accent);
+}
+
+/* ─── Data Typography ─── */
 .gradient-text {
-  background: linear-gradient(135deg, #00AEEF 0%, #6EC6E6 50%, #FFFFFF 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--text-0);
+  font-weight: 700;
 }
 
-/* Glass panel */
+/* ─── Card System ─── */
 .glass-panel {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  backdrop-filter: blur(16px);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-dim);
+  border-radius: 6px;
 }
 
-/* Barclays accent line — used as section divider */
-.barclays-accent {
-  height: 3px;
-  background: linear-gradient(90deg, var(--barclays-blue) 0%, var(--barclays-light-blue) 60%, transparent 100%);
-  border-radius: 2px;
-}
-
-/* Status badge variants */
-.badge-stable   { background: rgba(34,197,94,0.12);  color: #22C55E; border: 1px solid rgba(34,197,94,0.25);  border-radius: 5px; padding: 2px 8px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
-.badge-watch    { background: rgba(245,158,11,0.12); color: #F59E0B; border: 1px solid rgba(245,158,11,0.25); border-radius: 5px; padding: 2px 8px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
-.badge-critical { background: rgba(239,68,68,0.12);  color: #EF4444; border: 1px solid rgba(239,68,68,0.25);  border-radius: 5px; padding: 2px 8px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
-.badge-live     { background: rgba(0,174,239,0.12);  color: #00AEEF; border: 1px solid rgba(0,174,239,0.25);  border-radius: 5px; padding: 2px 8px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
-
-/* Barclays card — elevated surface */
 .barclays-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-dim);
+  border-radius: 6px;
+  transition: border-color 0.15s;
 }
 .barclays-card:hover {
-  border-color: rgba(0, 174, 239, 0.30);
-  box-shadow: 0 0 20px rgba(0, 174, 239, 0.06);
+  border-color: var(--border);
 }
 
-/* Recharts custom dark theme */
+/* ─── Section divider ─── */
+.barclays-accent {
+  height: 1px;
+  background: var(--border);
+}
+
+/* ─── Status Badges — semantic, high-contrast ─── */
+.badge-stable {
+  background: rgba(52, 211, 153, 0.12);
+  color: var(--green);
+  border: 1px solid rgba(52, 211, 153, 0.25);
+  border-radius: 3px;
+  padding: 2px 7px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.badge-watch {
+  background: rgba(251, 191, 36, 0.12);
+  color: var(--amber);
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  border-radius: 3px;
+  padding: 2px 7px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.badge-critical {
+  background: rgba(248, 113, 113, 0.12);
+  color: var(--red);
+  border: 1px solid rgba(248, 113, 113, 0.25);
+  border-radius: 3px;
+  padding: 2px 7px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.badge-live {
+  background: rgba(0, 174, 239, 0.1);
+  color: var(--accent);
+  border: 1px solid rgba(0, 174, 239, 0.25);
+  border-radius: 3px;
+  padding: 2px 7px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* ─── Recharts theming ─── */
 .recharts-cartesian-grid-horizontal line,
 .recharts-cartesian-grid-vertical line {
-  stroke: rgba(255, 255, 255, 0.05);
+  stroke: var(--border-dim);
 }
-.recharts-text { fill: #64748b; font-size: 11px; }
+.recharts-text { fill: var(--text-3); font-size: 11px; }
+
+/* ─── Data Table Rows ─── */
+.data-row {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-dim);
+  transition: background 0.1s;
+}
+.data-row:hover {
+  background: rgba(255,255,255,0.02);
+}
+.data-row:last-child {
+  border-bottom: none;
+}

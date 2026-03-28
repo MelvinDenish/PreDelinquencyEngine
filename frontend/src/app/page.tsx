@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { generateTransaction, CUSTOMERS } from "./data";
 import { scoreCustomer, notifyCustomer, checkHealth } from "./api";
 import type { Customer } from "./data";
@@ -10,13 +10,111 @@ import {
   ResponsiveContainer, AreaChart, Area, Cell,
 } from "recharts";
 import Link from "next/link";
+import gsap from "gsap";
 import {
   Activity, Shield, Users, Smartphone, Zap, TrendingUp,
   AlertTriangle, CheckCircle, Wifi, WifiOff,
   ArrowRight, BarChart3, Lock, ChevronDown, ChevronUp,
   Phone, Clock, Target, ShieldAlert, Stethoscope, Briefcase,
-  TrendingDown, AlertCircle,
+  TrendingDown, AlertCircle, Check,
 } from "lucide-react";
+
+// ═══════════════════════════════════════════════
+// ANIMATED NUMBER — GSAP count-up on mount
+// ═══════════════════════════════════════════════
+function AnimatedNumber({ value, prefix = "", suffix = "", duration = 1.2, decimals = 0 }: {
+  value: number; prefix?: string; suffix?: string; duration?: number; decimals?: number;
+}) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const tweenRef = useRef<{ val: number }>({ val: 0 });
+
+  useEffect(() => {
+    if (!ref.current) return;
+    tweenRef.current.val = 0;
+    gsap.to(tweenRef.current, {
+      val: value,
+      duration,
+      ease: "power2.out",
+      onUpdate: () => {
+        if (ref.current) {
+          const v = tweenRef.current.val;
+          ref.current.textContent = prefix + (decimals > 0 ? v.toFixed(decimals) : Math.round(v).toLocaleString()) + suffix;
+        }
+      },
+    });
+  }, [value, prefix, suffix, duration, decimals]);
+
+  return <span ref={ref}>{prefix}0{suffix}</span>;
+}
+
+// ═══════════════════════════════════════════════
+// TOAST SYSTEM
+// ═══════════════════════════════════════════════
+interface ToastItem {
+  id: number;
+  message: string;
+  type: "success" | "info";
+}
+
+function ToastContainer({ toasts, onRemove }: { toasts: ToastItem[]; onRemove: (id: number) => void }) {
+  return (
+    <div className="toast-container">
+      {toasts.map(t => (
+        <ToastNotification key={t.id} toast={t} onRemove={onRemove} />
+      ))}
+    </div>
+  );
+}
+
+function ToastNotification({ toast, onRemove }: { toast: ToastItem; onRemove: (id: number) => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    gsap.fromTo(el,
+      { x: 80, opacity: 0 },
+      { x: 0, opacity: 1, duration: 0.4, ease: "power3.out" },
+    );
+    const timeout = setTimeout(() => {
+      gsap.to(el, {
+        x: 80, opacity: 0, duration: 0.3, ease: "power2.in",
+        onComplete: () => onRemove(toast.id),
+      });
+    }, 3000);
+    return () => clearTimeout(timeout);
+  }, [toast.id, onRemove]);
+
+  return (
+    <div ref={ref} className={`toast ${toast.type === "success" ? "toast-success" : "toast-info"}`}>
+      <Check className="w-4 h-4 shrink-0" />
+      <span>{toast.message}</span>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════
+// SKELETON LOADER — shimmer placeholder for tab transitions
+// ═══════════════════════════════════════════════
+function TabSkeleton() {
+  return (
+    <div className="p-5 space-y-4 animate-fade-in-up">
+      <div className="grid grid-cols-6 gap-3">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="skeleton-card p-3.5 text-center" style={{ height: 80 }}>
+            <div className="skeleton" style={{ height: 24, width: "60%", margin: "0 auto 8px" }} />
+            <div className="skeleton" style={{ height: 10, width: "80%", margin: "0 auto" }} />
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="skeleton-card" style={{ height: 260 }} />
+        <div className="skeleton-card" style={{ height: 260 }} />
+      </div>
+      <div className="skeleton-card" style={{ height: 200 }} />
+    </div>
+  );
+}
 
 // ═══════════════════════════════════════════════
 // TYPES
@@ -61,7 +159,7 @@ const DEMO_CUSTOMER_IDS = [
 // MAIN PAGE
 // ═══════════════════════════════════════════════
 export default function Dashboard() {
-  const [activeView, setActiveView] = useState<string>("godmode");
+  const [activeView, setActiveView] = useState<string>("executive");
   const [clock, setClock] = useState("");
   const [events, setEvents] = useState<EventItem[]>([]);
   const [scores, setScores] = useState<ScoreItem[]>([]);
@@ -75,6 +173,26 @@ export default function Dashboard() {
   const [modelInfo, setModelInfo] = useState<Record<string, boolean>>({});
   const [scoringInProgress, setScoringInProgress] = useState(false);
   const [notifyResult, setNotifyResult] = useState<NotifyResult | null>(null);
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const [tabLoading, setTabLoading] = useState(false);
+
+  const addToast = useCallback((message: string, type: "success" | "info" = "success") => {
+    const id = Date.now() + Math.random();
+    setToasts(prev => [...prev, { id, message, type }]);
+  }, []);
+
+  const removeToast = useCallback((id: number) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
+
+  // Tab switching with skeleton shimmer
+  const switchTab = useCallback((key: string) => {
+    if (key === activeView) return;
+    setTabLoading(true);
+    setActiveView(key);
+    // Brief shimmer then reveal
+    setTimeout(() => setTabLoading(false), 400);
+  }, [activeView]);
 
   // Clock
   useEffect(() => {
@@ -124,7 +242,7 @@ export default function Dashboard() {
     setTimeout(async () => {
       setPipelineStage(3);
       let scoreVal = customer.riskScore;
-      let tier = customer.riskTier;
+      let tier: string = customer.riskTier;
       let source: "live" | "simulated" = "simulated";
       let xgb: number | null = null;
       let lgb: number | null = null;
@@ -159,7 +277,7 @@ export default function Dashboard() {
       if (customer.riskScore >= 0.5) {
         setPipelineStage(4);
         let source: "live" | "simulated" = "simulated";
-        const channels = ["📱 SMS", "💬 WhatsApp", "📧 Email", "🔔 Push"];
+        const channels = ["SMS", "WhatsApp", "Email", "Push"];
         let channel = channels[Math.floor(Math.random() * channels.length)];
         let msg = customer.genaiScript.substring(0, 80) + "...";
 
@@ -177,7 +295,7 @@ export default function Dashboard() {
             source = "live";
             if (result.results && result.results.length > 0) {
               const ch = result.results[0].channel;
-              channel = ch === "sms" ? "📱 SMS" : ch === "email" ? "📧 Email" : ch === "whatsapp" ? "💬 WhatsApp" : "🔔 Push";
+              channel = ch === "sms" ? "SMS" : ch === "email" ? "Email" : ch === "whatsapp" ? "WhatsApp" : "Push";
             }
           } catch {
             // Fall back to simulated
@@ -210,18 +328,18 @@ export default function Dashboard() {
       try {
         const demoId = DEMO_CUSTOMER_IDS[Math.floor(Math.random() * DEMO_CUSTOMER_IDS.length)];
         const result = await scoreCustomer(demoId);
-        // Merge real ML results with customer metadata
         setLiveScoreResult(result);
+        addToast(`${customer.name} scored: ${result.risk_score.toFixed(2)} (${result.risk_tier})`, "info");
       } catch {
-        setLiveScoreResult(null); // Fallback to simulated
+        setLiveScoreResult(null);
       }
     }
     setScoringInProgress(false);
-  }, [backendOnline]);
+  }, [backendOnline, addToast]);
 
   // ──── Send real notification from Customer view ────
   const triggerRealNotify = useCallback(async (action: string) => {
-    setServeResult(`⏳ Sending ${action} via real dispatcher...`);
+    setServeResult(`Sending ${action} via dispatcher...`);
     setNotifyResult(null);
     if (backendOnline) {
       try {
@@ -233,123 +351,122 @@ export default function Dashboard() {
           alert_message: `Customer self-service action: ${action}. Pre-approved — please process.`,
         });
         setNotifyResult(result);
-        setServeResult(`✅ ${action} dispatched via real service! Status: ${result.status}. Channels attempted: ${result.channels_attempted || 0}.`);
+        setServeResult(`${action} dispatched via real service. Status: ${result.status}. Channels attempted: ${result.channels_attempted || 0}.`);
+        addToast(`${action} dispatched successfully`, "success");
         return;
       } catch {
         // Fall through to simulated
       }
     }
-    setServeResult(`✅ ${action} accepted (simulated). Confirmation sent via SMS & Email.`);
-  }, [backendOnline]);
+    setServeResult(`${action} accepted (simulated). Confirmation sent via SMS & Email.`);
+    addToast(`${action} accepted — confirmation sent`, "success");
+  }, [backendOnline, addToast]);
 
   const views = [
-    { key: "godmode", label: "God Mode", icon: <Zap className="w-4 h-4" /> },
-    { key: "executive", label: "Executive", icon: <TrendingUp className="w-4 h-4" /> },
-    { key: "rm", label: "RM View", icon: <Users className="w-4 h-4" /> },
-    { key: "customer", label: "Customer", icon: <Smartphone className="w-4 h-4" /> },
+    { key: "executive", label: "Portfolio Overview", icon: <TrendingUp className="w-4 h-4" /> },
+    { key: "rm", label: "Relationship Manager", icon: <Users className="w-4 h-4" /> },
+    { key: "customer", label: "Customer Service", icon: <Smartphone className="w-4 h-4" /> },
+    { key: "godmode", label: "Operations Centre", icon: <Activity className="w-4 h-4" /> },
   ];
 
   return (
     <div className="min-h-screen">
-      {/* ═══ TOP BAR — Barclays Branding ═══ */}
+      {/* ═══ TOP BAR ═══ */}
       <header className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 h-14"
-        style={{ background: "rgba(0,44,108,0.96)", backdropFilter: "blur(20px)", borderBottom: "1px solid rgba(0,174,239,0.18)" }}>
+        style={{ background: "#0a1525", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
 
         {/* Brand */}
         <div className="flex items-center gap-3">
-          {/* Barclays Eagle SVG wordmark */}
           <div className="flex items-center gap-2.5">
             <div style={{
-              width: 32, height: 32, borderRadius: 8,
-              background: "linear-gradient(135deg, #00AEEF, #002C6C)",
+              width: 32, height: 32, borderRadius: 6,
+              background: "rgba(0,174,239,0.1)",
               display: "flex", alignItems: "center", justifyContent: "center",
-              boxShadow: "0 0 12px rgba(0,174,239,0.3)",
             }}>
               <Shield className="w-4 h-4 text-white" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span style={{ fontSize: 14, fontWeight: 800, color: "#FFFFFF", letterSpacing: "-0.02em" }}>BARCLAYS</span>
-                <span style={{
-                  fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 3,
-                  background: "rgba(0,174,239,0.2)", color: "#00AEEF",
-                  border: "1px solid rgba(0,174,239,0.35)", letterSpacing: "0.1em",
-                }}>PDI ENGINE</span>
-              </div>
-              <div style={{ fontSize: 9, color: "rgba(255,255,255,0.4)", letterSpacing: "0.05em" }}>
-                Pre-Delinquency Intervention Platform
+                <span style={{ fontSize: 15, fontWeight: 700, color: "#FFFFFF", letterSpacing: "0.04em" }}>BARCLAYS</span>
+                <span style={{ width: 1, height: 16, background: "rgba(255,255,255,0.2)", display: "inline-block" }} />
+                <span style={{ fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.7)", letterSpacing: "0.02em" }}>
+                  Pre-Delinquency Intelligence
+                </span>
               </div>
             </div>
           </div>
         </div>
 
         {/* Nav */}
-        <nav className="flex gap-1">
+        <nav className="flex gap-0.5">
           {views.map(v => (
-            <button key={v.key} onClick={() => setActiveView(v.key)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5`}
+            <button key={v.key} onClick={() => switchTab(v.key)}
+              className="px-3.5 py-1.5 text-xs font-medium transition-all flex items-center gap-1.5"
               style={{
-                background: activeView === v.key ? "rgba(0,174,239,0.12)" : "transparent",
-                border: activeView === v.key ? "1px solid rgba(0,174,239,0.3)" : "1px solid transparent",
-                color: activeView === v.key ? "#00AEEF" : "rgba(255,255,255,0.5)",
+                background: activeView === v.key ? "rgba(255,255,255,0.15)" : "transparent",
+                borderBottom: activeView === v.key ? "2px solid #FFFFFF" : "2px solid transparent",
+                color: activeView === v.key ? "#FFFFFF" : "rgba(255,255,255,0.55)",
+                borderRadius: "4px 4px 0 0",
               }}>
               {v.icon}{v.label}
             </button>
           ))}
-          {/* What-If Simulator link */}
           <Link href="/whatif"
-            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5"
+            className="px-3.5 py-1.5 text-xs font-medium transition-all flex items-center gap-1.5 ml-2"
             style={{
-              background: "rgba(0,174,239,0.08)",
-              border: "1px solid rgba(0,174,239,0.2)",
-              color: "#6EC6E6",
+              background: "rgba(255,255,255,0.08)",
+              border: "1px solid rgba(255,255,255,0.15)",
+              color: "rgba(255,255,255,0.7)",
               textDecoration: "none",
+              borderRadius: 4,
             }}>
             <BarChart3 className="w-3.5 h-3.5" />
-            What-If
+            Stress Testing
           </Link>
         </nav>
 
         {/* Status row */}
         <div className="flex items-center gap-3 text-xs">
-          {/* Security badge */}
-          <div className="flex items-center gap-1.5 px-2 py-1 rounded-md"
-            style={{ background: "rgba(0,174,239,0.06)", border: "1px solid rgba(0,174,239,0.15)" }}>
-            <Lock className="w-2.5 h-2.5" style={{ color: "#00AEEF" }} />
-            <span style={{ color: "#00AEEF", fontSize: 9, fontWeight: 700, letterSpacing: "0.08em" }}>JWT SECURED</span>
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded"
+            style={{ background: "rgba(255,255,255,0.08)" }}>
+            <Lock className="w-2.5 h-2.5 text-white/60" />
+            <span style={{ color: "rgba(255,255,255,0.6)", fontSize: 9, fontWeight: 600, letterSpacing: "0.05em" }}>SECURED</span>
           </div>
-          {/* Backend status indicator */}
-          <div className="flex items-center gap-1.5 px-2 py-1 rounded-md"
-            style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded"
+            style={{ background: "rgba(255,255,255,0.08)" }}>
             {backendOnline === null ? (
-              <><div className="w-2 h-2 rounded-full bg-slate-500 animate-pulse" /><span style={{ color: "#64748b", fontSize: 9 }}>CHECKING</span></>
+              <><div className="w-2 h-2 rounded-full bg-white/40" /><span style={{ color: "rgba(255,255,255,0.5)", fontSize: 9 }}>CONNECTING</span></>
             ) : backendOnline ? (
-              <><Wifi className="w-3 h-3" style={{ color: "#22C55E" }} /><span style={{ color: "#22C55E", fontSize: 9, fontWeight: 700 }}>ML LIVE</span></>
+              <><Wifi className="w-3 h-3 text-green-300" /><span style={{ color: "#86EFAC", fontSize: 9, fontWeight: 600 }}>ML ONLINE</span></>
             ) : (
-              <><WifiOff className="w-3 h-3" style={{ color: "#F59E0B" }} /><span style={{ color: "#F59E0B", fontSize: 9, fontWeight: 700 }}>SIMULATED</span></>
+              <><WifiOff className="w-3 h-3 text-amber-300" /><span style={{ color: "#FCD34D", fontSize: 9, fontWeight: 600 }}>SIMULATED</span></>
             )}
           </div>
-          <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-          <span style={{ color: "#22C55E", fontWeight: 700, fontSize: 9, letterSpacing: "0.1em" }}>LIVE</span>
           <span className="font-mono" style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>{clock}</span>
         </div>
       </header>
 
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
+
       <main className="pt-14">
-        {activeView === "godmode" && (
-          <GodModeView events={events} scores={scores} interventions={interventions}
-            counters={counters} pipelineStage={pipelineStage} backendOnline={backendOnline}
-            modelInfo={modelInfo} />
-        )}
-        {activeView === "executive" && <ExecutiveView />}
-        {activeView === "rm" && (
-          <RMView selectedCustomer={selectedCustomer} scoreCustomerLive={scoreCustomerLive}
-            liveScoreResult={liveScoreResult} scoringInProgress={scoringInProgress}
-            backendOnline={backendOnline} />
-        )}
-        {activeView === "customer" && (
-          <CustomerView serveResult={serveResult} triggerRealNotify={triggerRealNotify}
-            notifyResult={notifyResult} backendOnline={backendOnline} />
+        {tabLoading ? <TabSkeleton /> : (
+          <>
+            {activeView === "godmode" && (
+              <GodModeView events={events} scores={scores} interventions={interventions}
+                counters={counters} pipelineStage={pipelineStage} backendOnline={backendOnline}
+                modelInfo={modelInfo} />
+            )}
+            {activeView === "executive" && <ExecutiveView />}
+            {activeView === "rm" && (
+              <RMView selectedCustomer={selectedCustomer} scoreCustomerLive={scoreCustomerLive}
+                liveScoreResult={liveScoreResult} scoringInProgress={scoringInProgress}
+                backendOnline={backendOnline} />
+            )}
+            {activeView === "customer" && (
+              <CustomerView serveResult={serveResult} triggerRealNotify={triggerRealNotify}
+                notifyResult={notifyResult} backendOnline={backendOnline} />
+            )}
+          </>
         )}
       </main>
     </div>
@@ -357,7 +474,7 @@ export default function Dashboard() {
 }
 
 // ═══════════════════════════════════════════════
-// VIEW 1: GOD MODE SIMULATOR
+// VIEW: OPERATIONS CENTRE (Admin)
 // ═══════════════════════════════════════════════
 function GodModeView({ events, scores, interventions, counters, pipelineStage, backendOnline, modelInfo }: {
   events: EventItem[]; scores: ScoreItem[]; interventions: InterventionItem[];
@@ -365,26 +482,27 @@ function GodModeView({ events, scores, interventions, counters, pipelineStage, b
   pipelineStage: number; backendOnline: boolean | null;
   modelInfo: Record<string, boolean>;
 }) {
-  const tickers = [
-    { value: counters.txns.toLocaleString(), label: "Transactions Ingested" },
-    { value: counters.features.toLocaleString(), label: "Features Computed" },
-    { value: counters.scores.toLocaleString(), label: "Risk Scores Updated" },
-    { value: counters.interventions.toLocaleString(), label: "Interventions Triggered" },
-    { value: "47ms", label: "Avg Latency" },
-  ];
+  const eventStreamRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll event stream to top when new events arrive
+  useEffect(() => {
+    if (eventStreamRef.current && events.length > 0) {
+      gsap.to(eventStreamRef.current, { scrollTop: 0, duration: 0.3, ease: "power2.out" });
+    }
+  }, [events.length]);
 
   const pipelineNodes = [
-    ["🏦 CBS", "📨 Kafka", "⚡ Flink"],
-    ["📦 Spark", "🔴 Redis", "🧠 ML Ensemble"],
-    ["🔍 SHAP", "✨ GenAI", "📨 Dispatcher"],
+    ["CBS", "Kafka", "Flink"],
+    ["Spark", "Redis", "ML Ensemble"],
+    ["SHAP", "GenAI", "Dispatcher"],
   ];
 
   const getNodeClass = (rowIdx: number, nodeIdx: number) => {
     const flatIdx = rowIdx * 3 + nodeIdx;
     const stageMap: Record<number, number[]> = { 1: [0, 1], 2: [2, 3, 4], 3: [5, 6], 4: [7, 8] };
     const activeNodes = stageMap[pipelineStage] || [];
-    if (activeNodes.includes(flatIdx)) return "border-cyan-500/50 shadow-[0_0_20px_rgba(0,212,255,0.25)] animate-node-glow";
-    return "border-white/[0.07]";
+    if (activeNodes.includes(flatIdx)) return "border-blue-500 bg-cyan-500/8 animate-node-glow";
+    return "border-white/[0.08]";
   };
 
   const liveCount = scores.filter(s => s.source === "live").length;
@@ -392,49 +510,60 @@ function GodModeView({ events, scores, interventions, counters, pipelineStage, b
 
   return (
     <div className="p-5 space-y-4">
-      {/* Backend Status Banner */}
+      {/* Service Status Banner */}
       <div className={`flex items-center justify-between px-4 py-2.5 rounded-lg text-xs font-medium ${
-        backendOnline ? "bg-green-500/[0.08] border border-green-500/20 text-green-400"
-        : "bg-amber-500/[0.08] border border-amber-500/20 text-amber-400"}`}>
+        backendOnline ? "bg-green-500/10 border border-green-500/25 text-emerald-400"
+        : "bg-amber-500/10 border border-amber-500/25 text-amber-400"}`}>
         <div className="flex items-center gap-2">
           {backendOnline ? <Wifi className="w-4 h-4" /> : <WifiOff className="w-4 h-4" />}
           <span>{backendOnline
-            ? `🟢 Connected to scoring service (localhost:8000) — ML models: ${Object.entries(modelInfo).filter(([,v])=>v).map(([k])=>k).join(", ") || "loading..."}`
-            : "⚠️ Backend offline — using simulated data. Start the scoring service with: docker-compose up pdi-app"
+            ? `Connected to scoring service — ML models: ${Object.entries(modelInfo).filter(([,v])=>v).map(([k])=>k).join(", ") || "loading..."}`
+            : "Backend offline — using simulated data. Start the service with: docker-compose up pdi-app"
           }</span>
         </div>
         <div className="flex gap-3">
-          <span className="px-2 py-0.5 rounded bg-green-500/15 text-green-400">🟢 Live: {liveCount}</span>
-          <span className="px-2 py-0.5 rounded bg-slate-500/15 text-slate-400">⚪ Simulated: {simCount}</span>
+          <span className="px-2 py-0.5 rounded bg-green-100 text-emerald-400">Live: {liveCount}</span>
+          <span className="px-2 py-0.5 rounded bg-white/[0.05] text-slate-300">Simulated: {simCount}</span>
         </div>
       </div>
 
-      {/* Metric Tickers */}
+      {/* Metric Tickers — live animated counters */}
       <div className="grid grid-cols-5 gap-3">
-        {tickers.map((t, i) => (
+        {[
+          { value: counters.txns, label: "Transactions Ingested", suffix: "" },
+          { value: counters.features, label: "Features Computed", suffix: "" },
+          { value: counters.scores, label: "Risk Scores Updated", suffix: "" },
+          { value: counters.interventions, label: "Interventions Triggered", suffix: "" },
+        ].map((t, i) => (
           <div key={i} className="glass-panel p-4 text-center">
-            <div className="text-2xl font-extrabold font-mono gradient-text">{t.value}</div>
+            <div className="text-2xl font-bold font-mono text-slate-100">
+              <AnimatedNumber value={t.value} duration={0.6} />
+            </div>
             <div className="text-[10px] text-slate-500 uppercase tracking-wider mt-1">{t.label}</div>
           </div>
         ))}
+        <div className="glass-panel p-4 text-center">
+          <div className="text-2xl font-bold font-mono text-slate-100">47ms</div>
+          <div className="text-[10px] text-slate-500 uppercase tracking-wider mt-1">Avg Latency</div>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
         {/* Pipeline Status */}
         <div className="glass-panel p-5">
-          <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/[0.07]">
-            <h3 className="text-sm font-semibold flex items-center gap-2"><Activity className="w-4 h-4 text-cyan-400" /> Pipeline Status</h3>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-green-500/12 text-green-400 tracking-widest animate-pulse">ACTIVE</span>
+          <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/[0.06]">
+            <h3 className="text-sm font-semibold flex items-center gap-2 text-slate-100"><Activity className="w-4 h-4 text-cyan-400" /> Pipeline Status</h3>
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-green-500/10 text-emerald-400 border border-green-500/25">ACTIVE</span>
           </div>
           <div className="space-y-3">
             {pipelineNodes.map((row, ri) => (
               <div key={ri} className="flex items-center justify-center gap-3">
                 {row.map((node, ni) => (
                   <div key={ni} className="flex items-center gap-3">
-                    <div className={`px-4 py-2.5 rounded-lg bg-white/[0.03] border text-xs font-medium text-center min-w-[110px] transition-all duration-500 ${getNodeClass(ri, ni)}`}>
+                    <div className={`px-4 py-2.5 rounded-md bg-white/[0.03] border text-xs font-medium text-center min-w-[110px] transition-all duration-500 text-slate-200 ${getNodeClass(ri, ni)}`}>
                       {node}
                     </div>
-                    {ni < 2 && <ArrowRight className="w-4 h-4 text-cyan-500/40" />}
+                    {ni < 2 && <ArrowRight className="w-4 h-4 text-slate-300" />}
                   </div>
                 ))}
               </div>
@@ -444,69 +573,68 @@ function GodModeView({ events, scores, interventions, counters, pipelineStage, b
 
         {/* Live Event Stream */}
         <div className="glass-panel p-5">
-          <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/[0.07]">
-            <h3 className="text-sm font-semibold">📡 Live Event Stream</h3>
-            <span className="text-[10px] text-slate-500 font-mono">{events.length} events</span>
+          <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/[0.06]">
+            <h3 className="text-sm font-semibold text-slate-100">Live Event Stream</h3>
+            <span className="text-[10px] text-slate-400 font-mono">{events.length} events</span>
           </div>
-          <div className="space-y-1.5 max-h-[280px] overflow-y-auto">
+          <div ref={eventStreamRef} className="space-y-1.5 max-h-[280px] overflow-y-auto">
             {events.map(evt => (
-              <div key={evt.id} className={`px-3 py-2 rounded text-[11px] font-mono bg-white/[0.02] border-l-[3px] animate-slide-in ${evt.isStress ? "border-l-red-500" : "border-l-cyan-500/50"}`}>
-                <span className="text-slate-500 mr-2">{evt.time}</span>
+              <div key={evt.id} className={`px-3 py-2 rounded text-[11px] font-mono bg-white/[0.03] border-l-[3px] animate-slide-in ${evt.isStress ? "border-l-red-500" : "border-l-blue-400"}`}>
+                <span className="text-slate-400 mr-2">{evt.time}</span>
                 <span className={`font-semibold mr-1.5 ${evt.isStress ? "text-red-400" : "text-cyan-400"}`}>{evt.type}</span>
-                <span className="text-slate-300">{evt.customer}</span>
-                <span className="text-slate-500 mx-1.5">•</span>
-                <span className="text-slate-400">{evt.category}</span>
+                <span className="text-slate-200">{evt.customer}</span>
+                <span className="text-slate-300 mx-1.5">&middot;</span>
+                <span className="text-slate-500">{evt.category}</span>
                 <span className="text-slate-500 mx-1.5">₹{evt.amount.toLocaleString()}</span>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Recent Scores — now tagged with live/simulated */}
+        {/* Recent Scores */}
         <div className="glass-panel p-5">
-          <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/[0.07]">
-            <h3 className="text-sm font-semibold">🎯 Recent Scores</h3>
+          <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/[0.06]">
+            <h3 className="text-sm font-semibold text-slate-100">Recent Risk Scores</h3>
           </div>
           <div className="space-y-1.5 max-h-[280px] overflow-y-auto">
             {scores.map(s => (
-              <div key={s.id} className="flex items-center gap-3 px-3 py-2 rounded bg-white/[0.02] animate-slide-in">
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                  s.tier === "critical" ? "bg-red-500/15 text-red-400" :
-                  s.tier === "watch" ? "bg-amber-500/15 text-amber-400" :
-                  "bg-green-500/15 text-green-400"
+              <div key={s.id} className="flex items-center gap-3 px-3 py-2 rounded bg-white/[0.03] animate-slide-in">
+                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded ${
+                  s.tier === "critical" ? "bg-red-500/10 text-red-400 border border-red-500/25" :
+                  s.tier === "watch" ? "bg-amber-500/10 text-amber-400 border border-amber-500/25" :
+                  "bg-green-500/10 text-emerald-400 border border-green-500/25"
                 }`}>{s.tier.toUpperCase()}</span>
-                <span className="text-xs font-medium flex-1">{s.name}</span>
-                <span className="text-xs font-bold font-mono">{s.score.toFixed(2)}</span>
-                {/* Model breakdown on hover */}
+                <span className="text-xs font-medium flex-1 text-slate-200">{s.name}</span>
+                <span className="text-xs font-bold font-mono text-slate-100">{s.score.toFixed(2)}</span>
                 {s.source === "live" && s.xgb !== null && (
-                  <span className="text-[9px] text-cyan-400/60 font-mono" title={`XGB:${s.xgb?.toFixed(2)} LGB:${s.lgb?.toFixed(2)} LSTM:${s.lstm?.toFixed(2)}`}>
+                  <span className="text-[9px] text-blue-500 font-mono" title={`XGB:${s.xgb?.toFixed(2)} LGB:${s.lgb?.toFixed(2)} LSTM:${s.lstm?.toFixed(2)}`}>
                     XGB:{s.xgb?.toFixed(2)}
                   </span>
                 )}
-                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
-                  s.source === "live" ? "bg-green-500/10 text-green-400" : "bg-slate-500/10 text-slate-500"
-                }`}>{s.source === "live" ? "🟢 ML" : "⚪ SIM"}</span>
-                <span className="text-[10px] text-slate-500">{s.time}</span>
+                <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${
+                  s.source === "live" ? "bg-green-500/10 text-emerald-400 border border-green-500/25" : "bg-white/[0.05] text-slate-500"
+                }`}>{s.source === "live" ? "LIVE" : "SIM"}</span>
+                <span className="text-[10px] text-slate-400">{s.time}</span>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Interventions — tagged with live/simulated */}
+        {/* Interventions */}
         <div className="glass-panel p-5">
-          <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/[0.07]">
-            <h3 className="text-sm font-semibold">📨 Interventions Dispatched</h3>
+          <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/[0.06]">
+            <h3 className="text-sm font-semibold text-slate-100">Interventions Dispatched</h3>
           </div>
           <div className="space-y-1.5 max-h-[280px] overflow-y-auto">
             {interventions.map(intv => (
-              <div key={intv.id} className="flex items-center gap-3 px-3 py-2 rounded bg-white/[0.02] animate-slide-in">
+              <div key={intv.id} className="flex items-center gap-3 px-3 py-2 rounded bg-white/[0.03] animate-slide-in">
                 <span className="text-sm">{intv.channel}</span>
-                <span className="text-xs font-medium">{intv.name}</span>
-                <span className="text-[11px] text-slate-400 flex-1 truncate">{intv.message}</span>
-                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
-                  intv.source === "live" ? "bg-green-500/10 text-green-400" : "bg-slate-500/10 text-slate-500"
-                }`}>{intv.source === "live" ? "🟢 REAL" : "⚪ SIM"}</span>
-                <span className="text-[10px] text-slate-500">{intv.time}</span>
+                <span className="text-xs font-medium text-slate-200">{intv.name}</span>
+                <span className="text-[11px] text-slate-500 flex-1 truncate">{intv.message}</span>
+                <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${
+                  intv.source === "live" ? "bg-green-500/10 text-emerald-400 border border-green-500/25" : "bg-white/[0.05] text-slate-500"
+                }`}>{intv.source === "live" ? "LIVE" : "SIM"}</span>
+                <span className="text-[10px] text-slate-400">{intv.time}</span>
               </div>
             ))}
           </div>
@@ -517,23 +645,22 @@ function GodModeView({ events, scores, interventions, counters, pipelineStage, b
 }
 
 // ═══════════════════════════════════════════════
-// VIEW 2: EXECUTIVE PORTFOLIO
+// VIEW: PORTFOLIO OVERVIEW (Risk Officers / Executives)
 // ═══════════════════════════════════════════════
 function ExecutiveView() {
   const migrationData = [
-    { label: "Stable → Watch", count: 847, pct: 35, color: "bg-gradient-to-r from-amber-500 to-amber-600" },
-    { label: "Watch → Critical", count: 412, pct: 18, color: "bg-gradient-to-r from-red-500 to-red-600" },
-    { label: "Critical → Default", count: 142, pct: 6, color: "bg-gradient-to-r from-red-800 to-pink-800" },
-    { label: "Watch → Stable ✅", count: 1024, pct: 42, color: "bg-gradient-to-r from-green-500 to-emerald-500" },
-    { label: "Critical → Watch ✅", count: 638, pct: 28, color: "bg-gradient-to-r from-teal-500 to-cyan-600" },
+    { label: "Stable to Watch", count: 847, pct: 35, color: "bg-amber-500/100" },
+    { label: "Watch to Critical", count: 412, pct: 18, color: "bg-red-500/100" },
+    { label: "Critical to Default", count: 142, pct: 6, color: "bg-red-800" },
+    { label: "Watch to Stable (recovered)", count: 1024, pct: 42, color: "bg-green-500/100" },
+    { label: "Critical to Watch (recovered)", count: 638, pct: 28, color: "bg-teal-500" },
   ];
 
   const channelData = [
-    { name: "WhatsApp", icon: "💬", response: 68, color: "#00E676" },
-    { name: "SMS", icon: "📱", response: 45, color: "#00D4FF" },
-    { name: "Email", icon: "📧", response: 32, color: "#7B2FFF" },
-    { name: "RM Call", icon: "📞", response: 89, color: "#FFB300" },
-    { name: "App Push", icon: "🔔", response: 28, color: "#FF3CAC" },
+    { name: "WhatsApp", response: 68, color: "#34D399" },
+    { name: "SMS", response: 45, color: "#22D3EE" },
+    { name: "Email", response: 32, color: "#A78BFA" },
+    { name: "RM Call", response: 89, color: "#FBBF24" },
   ];
 
   const upliftChart = [
@@ -547,36 +674,38 @@ function ExecutiveView() {
 
   return (
     <div className="p-5 space-y-4">
-      {/* ═══ EXECUTIVE KPI BAR ═══ */}
+      {/* KPI Summary Bar — animated count-up on load */}
       <div className="grid grid-cols-6 gap-3">
         {[
-          { val: "₹4,217Cr", label: "Total AUM", sub: "retail portfolio", cls: "text-cyan-400" },
-          { val: "24,891", label: "Active Customers", sub: "scored this week", cls: "text-white" },
-          { val: "1.83%", label: "Gross NPA", sub: "↓ 0.12% from last month", cls: "text-green-400" },
-          { val: "₹8.4Cr", label: "AUM Protected", sub: "via interventions (90d)", cls: "text-purple-400" },
-          { val: "2,847", label: "Interventions", sub: "dispatched this month", cls: "text-amber-400" },
-          { val: "64%", label: "Response Rate", sub: "across all channels", cls: "text-green-400" },
+          { num: 4217, prefix: "₹", suffix: "Cr", label: "Total AUM", sub: "Retail portfolio", accent: "#00395D" },
+          { num: 24891, prefix: "", suffix: "", label: "Active Customers", sub: "Scored this week", accent: "#22D3EE" },
+          { num: 1.83, prefix: "", suffix: "%", label: "Gross NPA", sub: "Down 0.12% from last month", accent: "#34D399", decimals: 2 },
+          { num: 8.4, prefix: "₹", suffix: "Cr", label: "AUM Protected", sub: "Via interventions (90d)", accent: "#A78BFA", decimals: 1 },
+          { num: 2847, prefix: "", suffix: "", label: "Interventions", sub: "Dispatched this month", accent: "#FBBF24" },
+          { num: 64, prefix: "", suffix: "%", label: "Response Rate", sub: "Across all channels", accent: "#34D399" },
         ].map((kpi, i) => (
-          <div key={i} className="glass-panel p-3.5 text-center">
-            <div className={`text-xl font-extrabold font-mono ${kpi.cls}`}>{kpi.val}</div>
-            <div className="text-[10px] text-slate-400 uppercase tracking-wider mt-1 font-semibold">{kpi.label}</div>
-            <div className="text-[9px] text-slate-500 mt-0.5">{kpi.sub}</div>
+          <div key={i} className="glass-panel p-3.5 text-center border-t-2" style={{ borderTopColor: kpi.accent }}>
+            <div className="text-xl font-bold font-mono text-slate-100">
+              <AnimatedNumber value={kpi.num} prefix={kpi.prefix} suffix={kpi.suffix} decimals={kpi.decimals ?? 0} duration={1.4} />
+            </div>
+            <div className="text-[10px] text-slate-500 uppercase tracking-wider mt-1 font-semibold">{kpi.label}</div>
+            <div className="text-[9px] text-slate-400 mt-0.5">{kpi.sub}</div>
           </div>
         ))}
       </div>
 
       <div className="grid grid-cols-2 gap-4">
         {/* Risk Migration */}
-        <div className="glass-panel p-5 col-span-2">
-          <h3 className="text-sm font-semibold mb-4 pb-3 border-b border-white/[0.07]">📈 Risk Migration Matrix (90-Day Simulated)</h3>
-          <div className="space-y-3">
+        <div className="glass-panel p-6 col-span-2">
+          <h3 className="text-sm font-semibold mb-6 pb-3 border-b border-white/[0.06] text-slate-100">Risk Migration Matrix (90-Day)</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
             {migrationData.map((m, i) => (
               <div key={i} className="flex items-center gap-4">
-                <span className="text-xs font-medium w-40 shrink-0">{m.label}</span>
-                <div className="flex-1 h-6 bg-white/[0.04] rounded-full overflow-hidden">
-                  <div className={`h-full rounded-full ${m.color} transition-all duration-1000`} style={{ width: `${m.pct}%` }} />
+                <span className="text-xs font-medium w-52 shrink-0 text-slate-300">{m.label}</span>
+                <div className="flex-1 h-7 bg-white/[0.05] rounded overflow-hidden">
+                  <div className={`h-full rounded ${m.color} transition-all duration-1000`} style={{ width: `${m.pct}%` }} />
                 </div>
-                <span className="text-xs text-slate-400 w-44 text-right">{m.count.toLocaleString()} customers ({m.pct}%)</span>
+                <span className="text-xs text-slate-500 w-44 text-right">{m.count.toLocaleString()} customers ({m.pct}%)</span>
               </div>
             ))}
           </div>
@@ -584,70 +713,68 @@ function ExecutiveView() {
 
         {/* ROI */}
         <div className="glass-panel p-5">
-          <h3 className="text-sm font-semibold mb-4 pb-3 border-b border-white/[0.07]">💰 Intervention ROI (A/B Uplift)</h3>
-          <div className="grid grid-cols-2 gap-3 mb-4">
+          <h3 className="text-sm font-semibold mb-4 pb-3 border-b border-white/[0.06] text-slate-100">Intervention ROI — A/B Uplift Analysis</h3>
+          <div className="grid grid-cols-2 gap-4 mb-5">
             {[
-              { val: "14.2%", label: "Uplift Lift", cls: "text-green-400" },
-              { val: "₹8.4Cr", label: "AUM Protected", cls: "text-cyan-400" },
-              { val: "72.8%", label: "Treated Recovery", cls: "text-purple-400" },
-              { val: "58.6%", label: "Holdout Recovery", cls: "text-amber-400" },
+              { val: "14.2%", label: "Uplift Lift", color: "#34D399" },
+              { val: "₹8.4Cr", label: "AUM Protected", color: "#22D3EE" },
+              { val: "72.8%", label: "Treated Recovery", color: "#A78BFA" },
+              { val: "58.6%", label: "Holdout Recovery", color: "#FBBF24" },
             ].map((r, i) => (
-              <div key={i} className="p-3 rounded-lg bg-white/[0.03] text-center">
-                <div className={`text-xl font-extrabold font-mono ${r.cls}`}>{r.val}</div>
-                <div className="text-[10px] text-slate-500 uppercase tracking-wider mt-1">{r.label}</div>
+              <div key={i} className="p-4 rounded-lg bg-white/[0.03] text-center">
+                <div className="text-2xl font-bold font-mono" style={{ color: r.color }}>{r.val}</div>
+                <div className="text-[10px] text-slate-500 uppercase tracking-wider mt-1.5">{r.label}</div>
               </div>
             ))}
           </div>
           <ResponsiveContainer width="100%" height={180}>
             <AreaChart data={upliftChart}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-              <XAxis dataKey="month" tick={{ fill: "#64748b", fontSize: 11 }} />
-              <YAxis tick={{ fill: "#64748b", fontSize: 11 }} domain={[40, 80]} />
-              <Tooltip contentStyle={{ background: "#0c1220", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontSize: 12 }} />
-              <Area type="monotone" dataKey="treated" stroke="#00D4FF" fill="rgba(0,212,255,0.15)" strokeWidth={2} name="Treated" />
-              <Area type="monotone" dataKey="holdout" stroke="#475569" fill="rgba(71,85,105,0.1)" strokeWidth={2} strokeDasharray="5 5" name="Holdout" />
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+              <XAxis dataKey="month" tick={{ fill: "#94A3B8", fontSize: 11 }} />
+              <YAxis tick={{ fill: "#94A3B8", fontSize: 11 }} domain={[40, 80]} />
+              <Tooltip contentStyle={{ background: "#132337", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, fontSize: 12, color: "#E2E8F0" }} />
+              <Area type="monotone" dataKey="treated" stroke="#22D3EE" fill="rgba(0,119,182,0.1)" strokeWidth={2} name="Treated" />
+              <Area type="monotone" dataKey="holdout" stroke="#475569" fill="rgba(148,163,184,0.05)" strokeWidth={2} strokeDasharray="5 5" name="Holdout" />
             </AreaChart>
           </ResponsiveContainer>
         </div>
 
         {/* Channel Efficiency */}
         <div className="glass-panel p-5">
-          <h3 className="text-sm font-semibold mb-4 pb-3 border-b border-white/[0.07]">📱 Channel Efficiency (LinUCB Bandit)</h3>
-          <div className="space-y-3 mb-4">
+          <h3 className="text-sm font-semibold mb-4 pb-3 border-b border-white/[0.06] text-slate-100">Channel Efficiency — LinUCB Bandit</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }} className="mb-5">
             {channelData.map((ch, i) => (
               <div key={i} className="flex items-center gap-3 text-xs">
-                <span className="text-base w-7 text-center">{ch.icon}</span>
-                <span className="w-20 font-medium">{ch.name}</span>
-                <div className="flex-1 h-5 bg-white/[0.04] rounded-full overflow-hidden">
-                  <div className="h-full rounded-full transition-all duration-1000" style={{ width: `${ch.response}%`, background: ch.color }} />
+                <span className="w-20 font-medium text-slate-200">{ch.name}</span>
+                <div className="flex-1 h-6 bg-white/[0.05] rounded overflow-hidden">
+                  <div className="h-full rounded transition-all duration-1000" style={{ width: `${ch.response}%`, background: ch.color }} />
                 </div>
-                <span className="text-slate-400 w-24 text-right font-mono">{ch.response}% response</span>
+                <span className="text-slate-500 w-24 text-right font-mono">{ch.response}%</span>
               </div>
             ))}
           </div>
-          <ResponsiveContainer width="100%" height={140}>
-            <BarChart data={channelData} barSize={20}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-              <XAxis dataKey="name" tick={{ fill: "#64748b", fontSize: 10 }} />
-              <YAxis tick={{ fill: "#64748b", fontSize: 10 }} />
-              <Tooltip contentStyle={{ background: "#0c1220", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontSize: 12 }} />
+          <ResponsiveContainer width="100%" height={170}>
+            <BarChart data={channelData} barSize={28} barGap={8} barCategoryGap="25%">
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+              <XAxis dataKey="name" tick={{ fill: "#94A3B8", fontSize: 10 }} />
+              <YAxis tick={{ fill: "#94A3B8", fontSize: 10 }} />
+              <Tooltip contentStyle={{ background: "#132337", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, fontSize: 12, color: "#E2E8F0" }} />
               <Bar dataKey="response" radius={[4, 4, 0, 0]}>
                 {channelData.map((entry, idx) => <Cell key={idx} fill={entry.color} />)}
               </Bar>
             </BarChart>
           </ResponsiveContainer>
-          <p className="text-[11px] text-slate-500 mt-3 p-2.5 rounded-lg bg-purple-500/[0.06] border border-purple-500/15">
-            🤖 LinUCB dynamically shifts budget → WhatsApp for young urban segments, RM Call for HNI.
+          <p className="text-[11px] text-slate-500 mt-3 p-2.5 rounded-lg bg-cyan-500/8 border border-cyan-500/20">
+            LinUCB dynamically allocates budget: WhatsApp for young urban segments, RM Call for HNI.
           </p>
         </div>
 
-        {/* ═══ EMPLOYER CONTAGION RADAR ═══ */}
-        <div className="glass-panel p-5 col-span-2" style={{ borderColor: "rgba(0,174,239,0.2)" }}>
-          <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/[0.07]">
+        {/* Employer Contagion Radar */}
+        <div className="glass-panel p-5 col-span-2">
+          <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/[0.06]">
             <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
-              <h3 className="text-sm font-semibold">🏢 Employer Contagion Radar</h3>
-              <span style={{ fontSize: 9, color: "rgba(255,255,255,0.35)" }}>— automated from MCA filings + news NLP + transaction patterns</span>
+              <h3 className="text-sm font-semibold text-slate-100">Employer Contagion Radar</h3>
+              <span className="text-[9px] text-slate-400">MCA filings, News NLP, Transaction patterns</span>
             </div>
             <span className="badge-live">REAL-TIME</span>
           </div>
@@ -660,45 +787,44 @@ function ExecutiveView() {
               { name: "Tata Consultancy (TCS)", customers: 2891, healthScore: 0.82, atRisk: 12, trend: +0.02, signal: "Stable. Record hiring, salary increments on track. No stress signals.", tier: "stable" as const },
               { name: "Infosys Ltd.", customers: 1567, healthScore: 0.78, atRisk: 23, trend: -0.01, signal: "Minor bench increase, but financials strong. Monitoring only.", tier: "stable" as const },
             ].map((emp, i) => (
-              <div key={i} className="flex items-center gap-4 px-3 py-2.5 rounded-lg transition-all hover:bg-white/[0.02]"
-                style={{ background: emp.tier === "critical" ? "rgba(239,68,68,0.04)" : emp.tier === "watch" ? "rgba(245,158,11,0.03)" : "transparent",
-                  borderLeft: `3px solid ${emp.tier === "critical" ? "#EF4444" : emp.tier === "watch" ? "#F59E0B" : "#22C55E"}` }}>
-                {/* Employer */}
+              <div key={i} className="flex items-center gap-4 px-3 py-2.5 rounded-lg transition-all hover:bg-white/[0.03]"
+                style={{ background: emp.tier === "critical" ? "rgba(248,113,113,0.08)" : emp.tier === "watch" ? "rgba(251,191,36,0.08)" : "transparent",
+                  borderLeft: `3px solid ${emp.tier === "critical" ? "#F87171" : emp.tier === "watch" ? "#FBBF24" : "#34D399"}` }}>
                 <div className="w-44 shrink-0">
-                  <div className="text-xs font-semibold">{emp.name}</div>
-                  <div className="text-[10px] text-slate-500">{emp.customers.toLocaleString()} customers</div>
+                  <div className="text-xs font-semibold text-slate-100">{emp.name}</div>
+                  <div className="text-[10px] text-slate-400">{emp.customers.toLocaleString()} customers</div>
                 </div>
                 {/* Health Score gauge */}
                 <div className="w-28 shrink-0">
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-[9px] text-slate-500 uppercase">Health</span>
-                    <span className={`text-xs font-extrabold font-mono ${emp.healthScore < 0.35 ? "text-red-400" : emp.healthScore < 0.5 ? "text-amber-400" : "text-green-400"}`}>
+                    <span className="text-[9px] text-slate-400 uppercase">Health</span>
+                    <span className={`text-xs font-bold font-mono ${emp.healthScore < 0.35 ? "text-red-400" : emp.healthScore < 0.5 ? "text-amber-400" : "text-emerald-400"}`}>
                       {emp.healthScore.toFixed(2)}
                     </span>
                   </div>
-                  <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.06)" }}>
+                  <div className="h-1.5 rounded-full overflow-hidden bg-white/[0.05]">
                     <div className="h-full rounded-full transition-all" style={{
                       width: `${emp.healthScore * 100}%`,
-                      background: emp.healthScore < 0.35 ? "#EF4444" : emp.healthScore < 0.5 ? "#F59E0B" : "#22C55E",
+                      background: emp.healthScore < 0.35 ? "#F87171" : emp.healthScore < 0.5 ? "#FBBF24" : "#34D399",
                     }} />
                   </div>
                 </div>
                 {/* At-risk count */}
                 <div className="w-24 text-center shrink-0">
-                  <div className={`text-sm font-extrabold font-mono ${emp.atRisk > 100 ? "text-red-400" : emp.atRisk > 30 ? "text-amber-400" : "text-slate-500"}`}>
+                  <div className={`text-sm font-bold font-mono ${emp.atRisk > 100 ? "text-red-400" : emp.atRisk > 30 ? "text-amber-400" : "text-slate-400"}`}>
                     {emp.atRisk}
                   </div>
-                  <div className="text-[9px] text-slate-500">newly at-risk</div>
+                  <div className="text-[9px] text-slate-400">newly at-risk</div>
                 </div>
                 {/* Trend */}
                 <div className="w-16 text-center shrink-0">
-                  <span className={`text-xs font-bold font-mono ${emp.trend < -0.1 ? "text-red-400" : emp.trend < 0 ? "text-amber-400" : "text-green-400"}`}>
+                  <span className={`text-xs font-bold font-mono ${emp.trend < -0.1 ? "text-red-400" : emp.trend < 0 ? "text-amber-400" : "text-emerald-400"}`}>
                     {emp.trend > 0 ? "+" : ""}{emp.trend.toFixed(2)}
                   </span>
-                  <div className="text-[9px] text-slate-500">30d Δ</div>
+                  <div className="text-[9px] text-slate-400">30d delta</div>
                 </div>
                 {/* Signal */}
-                <div className="flex-1 text-[11px] text-slate-400 leading-snug">{emp.signal}</div>
+                <div className="flex-1 text-[11px] text-slate-500 leading-snug">{emp.signal}</div>
                 {/* Tier badge */}
                 <span className={`shrink-0 ${emp.tier === "critical" ? "badge-critical" : emp.tier === "watch" ? "badge-watch" : "badge-stable"}`}>
                   {emp.tier}
@@ -706,16 +832,16 @@ function ExecutiveView() {
               </div>
             ))}
           </div>
-          <p className="text-[11px] text-slate-500 mt-3 p-2.5 rounded-lg" style={{ background: "rgba(0,174,239,0.04)", border: "1px solid rgba(0,174,239,0.1)" }}>
-            📡 Sources: MCA quarterly filings, BSE/NSE announcements, Google News NLP (sentiment), employee transaction pattern anomaly detection. Auto-refreshes every 6 hours.
+          <p className="text-[11px] text-slate-400 mt-3 p-2.5 rounded bg-white/[0.03] border border-white/[0.06]">
+            Sources: MCA quarterly filings, BSE/NSE announcements, News NLP (sentiment), employee transaction pattern anomaly detection. Refreshes every 6 hours.
           </p>
         </div>
 
-        {/* ═══ EARLY WARNING SIGNALS ═══ */}
+        {/* Early Warning Signals */}
         <div className="glass-panel p-5">
-          <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/[0.07]">
-            <h3 className="text-sm font-semibold">🚨 Early Warning Signals</h3>
-            <span className="text-[9px] text-slate-500">auto-detected from transaction patterns</span>
+          <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/[0.06]">
+            <h3 className="text-sm font-semibold text-slate-100">Early Warning Signals</h3>
+            <span className="text-[9px] text-slate-400">Auto-detected from transaction patterns</span>
           </div>
           <div className="space-y-2.5">
             {[
@@ -727,20 +853,20 @@ function ExecutiveView() {
               { signal: "Auto-debit bounces", current: "6.4%", prev: "4.1%", change: "+56%", severity: "red" as const, detail: "Home loan EMIs — post-rate-hike stress in NCR region" },
             ].map((s, i) => (
               <div key={i} className="flex items-center gap-3 px-3 py-2 rounded-lg"
-                style={{ background: s.severity === "red" ? "rgba(239,68,68,0.04)" : "rgba(245,158,11,0.04)",
-                  borderLeft: `3px solid ${s.severity === "red" ? "#EF4444" : "#F59E0B"}` }}>
+                style={{ background: s.severity === "red" ? "rgba(248,113,113,0.08)" : "rgba(251,191,36,0.08)",
+                  borderLeft: `3px solid ${s.severity === "red" ? "#F87171" : "#FBBF24"}` }}>
                 <div className="w-44 shrink-0">
-                  <div className="text-xs font-semibold">{s.signal}</div>
-                  <div className="text-[10px] text-slate-500">{s.detail}</div>
+                  <div className="text-xs font-semibold text-slate-100">{s.signal}</div>
+                  <div className="text-[10px] text-slate-400">{s.detail}</div>
                 </div>
                 <div className="flex items-center gap-2 w-32 shrink-0">
-                  <span className="text-[10px] text-slate-500 line-through">{s.prev}</span>
-                  <span className="text-[10px] text-slate-500">→</span>
-                  <span className="text-xs font-bold font-mono" style={{ color: s.severity === "red" ? "#EF4444" : "#F59E0B" }}>{s.current}</span>
+                  <span className="text-[10px] text-slate-400 line-through">{s.prev}</span>
+                  <span className="text-[10px] text-slate-400">&rarr;</span>
+                  <span className="text-xs font-bold font-mono" style={{ color: s.severity === "red" ? "#F87171" : "#FBBF24" }}>{s.current}</span>
                 </div>
-                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded font-mono"
-                  style={{ background: s.severity === "red" ? "rgba(239,68,68,0.12)" : "rgba(245,158,11,0.12)",
-                    color: s.severity === "red" ? "#EF4444" : "#F59E0B" }}>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded font-mono"
+                  style={{ background: s.severity === "red" ? "rgba(248,113,113,0.15)" : "rgba(251,191,36,0.15)",
+                    color: s.severity === "red" ? "#F87171" : "#FBBF24" }}>
                   {s.change} MoM
                 </span>
               </div>
@@ -748,26 +874,26 @@ function ExecutiveView() {
           </div>
         </div>
 
-        {/* ═══ PORTFOLIO HEALTH SCORECARD ═══ */}
+        {/* Portfolio Health Scorecard */}
         <div className="glass-panel p-5">
-          <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/[0.07]">
-            <h3 className="text-sm font-semibold">📊 Portfolio Health Scorecard</h3>
-            <span className="text-[9px] text-slate-500">composite risk index</span>
+          <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/[0.06]">
+            <h3 className="text-sm font-semibold text-slate-100">Portfolio Health Scorecard</h3>
+            <span className="text-[9px] text-slate-400">Composite risk index</span>
           </div>
           {/* Central gauge */}
           <div className="flex flex-col items-center mb-4">
             <div className="relative w-32 h-32">
               <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
-                <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="8" />
+                <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="8" />
                 <circle cx="50" cy="50" r="42" fill="none" stroke="url(#healthGrad)" strokeWidth="8"
                   strokeDasharray={`${72.4 * 2.64} ${100 * 2.64}`} strokeLinecap="round" />
                 <defs><linearGradient id="healthGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" stopColor="#22C55E" /><stop offset="50%" stopColor="#00AEEF" /><stop offset="100%" stopColor="#F59E0B" />
+                  <stop offset="0%" stopColor="#34D399" /><stop offset="50%" stopColor="#22D3EE" /><stop offset="100%" stopColor="#FBBF24" />
                 </linearGradient></defs>
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-3xl font-extrabold font-mono text-green-400">72.4</span>
-                <span className="text-[9px] text-slate-500 uppercase tracking-wider">of 100</span>
+                <span className="text-3xl font-bold font-mono text-emerald-400">72.4</span>
+                <span className="text-[9px] text-slate-400 uppercase tracking-wider">of 100</span>
               </div>
             </div>
             <span className="mt-1 badge-stable">HEALTHY</span>
@@ -784,12 +910,12 @@ function ExecutiveView() {
               { metric: "Age Fairness SPD", value: "0.17", target: "< 0.10", pass: false },
             ].map((m, i) => (
               <div key={i} className="flex items-center justify-between px-2 py-1.5 rounded text-xs"
-                style={{ background: m.pass ? "transparent" : "rgba(245,158,11,0.04)" }}>
-                <span className="text-slate-400">{m.metric}</span>
+                style={{ background: m.pass ? "transparent" : "rgba(251,191,36,0.08)" }}>
+                <span className="text-slate-300">{m.metric}</span>
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-slate-500">{m.target}</span>
-                  <span className={`font-bold font-mono ${m.pass ? "text-green-400" : "text-amber-400"}`}>{m.value}</span>
-                  {m.pass ? <CheckCircle className="w-3 h-3 text-green-400" /> : <AlertTriangle className="w-3 h-3 text-amber-400" />}
+                  <span className="text-[10px] text-slate-400">{m.target}</span>
+                  <span className={`font-bold font-mono ${m.pass ? "text-emerald-400" : "text-amber-400"}`}>{m.value}</span>
+                  {m.pass ? <CheckCircle className="w-3 h-3 text-emerald-400" /> : <AlertTriangle className="w-3 h-3 text-amber-400" />}
                 </div>
               </div>
             ))}
@@ -798,19 +924,19 @@ function ExecutiveView() {
 
         {/* Drift & Fairness */}
         <div className="glass-panel p-5 col-span-2">
-          <h3 className="text-sm font-semibold mb-4 pb-3 border-b border-white/[0.07]">⚖️ Model Drift & Fairness Monitor</h3>
+          <h3 className="text-sm font-semibold mb-4 pb-3 border-b border-white/[0.06] text-slate-100">Model Drift & Fairness Monitor</h3>
           <div className="grid grid-cols-4 gap-3">
             {[
-              { icon: <CheckCircle className="w-5 h-5 text-green-400" />, title: "PSI Drift", val: "0.08", desc: "Below 0.20 threshold", pass: true },
-              { icon: <CheckCircle className="w-5 h-5 text-green-400" />, title: "Gender Parity", val: "0.96", desc: "Fairlearn DP ≥ 0.80", pass: true },
-              { icon: <CheckCircle className="w-5 h-5 text-green-400" />, title: "Regional Fairness", val: "0.93", desc: "AIF360 equal opportunity", pass: true },
+              { icon: <CheckCircle className="w-5 h-5 text-emerald-400" />, title: "PSI Drift", val: "0.08", desc: "Below 0.20 threshold", pass: true },
+              { icon: <CheckCircle className="w-5 h-5 text-emerald-400" />, title: "Gender Parity", val: "0.96", desc: "Fairlearn DP >= 0.80", pass: true },
+              { icon: <CheckCircle className="w-5 h-5 text-emerald-400" />, title: "Regional Fairness", val: "0.93", desc: "AIF360 equal opportunity", pass: true },
               { icon: <AlertTriangle className="w-5 h-5 text-amber-400" />, title: "Age Group SPD", val: "0.17", desc: "Slightly elevated for 18-25", pass: false },
             ].map((c, i) => (
-              <div key={i} className={`p-4 rounded-xl bg-white/[0.02] text-center border ${c.pass ? "border-green-500/20" : "border-amber-500/30"}`}>
+              <div key={i} className={`p-4 rounded-lg text-center border ${c.pass ? "bg-green-500/10 border-green-500/25" : "bg-amber-500/10 border-amber-500/25"}`}>
                 <div className="flex justify-center mb-2">{c.icon}</div>
-                <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">{c.title}</div>
-                <div className={`text-2xl font-extrabold font-mono ${c.pass ? "text-green-400" : "text-amber-400"}`}>{c.val}</div>
-                <div className="text-[10px] text-slate-500 mt-1">{c.desc}</div>
+                <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">{c.title}</div>
+                <div className={`text-2xl font-bold font-mono ${c.pass ? "text-emerald-400" : "text-amber-400"}`}>{c.val}</div>
+                <div className="text-[10px] text-slate-400 mt-1">{c.desc}</div>
               </div>
             ))}
           </div>
@@ -842,18 +968,17 @@ function RMPreCallBrief({ customer }: { customer: Customer }) {
   if (customer.riskTier === "stable" || !customer.aiOpener) return null;
 
   return (
-    <div className="rounded-xl overflow-hidden" style={{ border: "1px solid rgba(0,174,239,0.25)", background: "rgba(0,22,44,0.7)" }}>
+    <div className="rounded-lg overflow-hidden border border-white/[0.08] bg-[#132337]">
       {/* Header bar */}
       <div className="flex items-center justify-between px-4 py-2.5"
-        style={{ background: "rgba(0,44,108,0.6)", borderBottom: "1px solid rgba(0,174,239,0.15)" }}>
+        style={{ background: "rgba(0,174,239,0.08)", borderBottom: "1px solid rgba(0,174,239,0.15)" }}>
         <div className="flex items-center gap-2">
-          <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "#00AEEF" }} />
-          <span style={{ fontSize: 10, fontWeight: 800, color: "#00AEEF", letterSpacing: "0.12em" }}>AI PRE-CALL BRIEF</span>
-          <span style={{ fontSize: 9, color: "rgba(255,255,255,0.4)" }}>— Groq LLM + SHAP Analysis</span>
+          <span style={{ fontSize: 10, fontWeight: 700, color: "#FFFFFF", letterSpacing: "0.08em" }}>PRE-CALL INTELLIGENCE BRIEF</span>
+          <span style={{ fontSize: 9, color: "rgba(255,255,255,0.5)" }}>SHAP + LLM Analysis</span>
         </div>
-        <span className="text-[10px] font-extrabold px-2 py-0.5 rounded"
-          style={{ background: `rgba(${customer.tteDays <= 7 ? "239,68,68" : customer.tteDays <= 14 ? "245,158,11" : "0,174,239"},0.15)`,
-            color: urgencyColor, border: `1px solid ${urgencyColor}40` }}>
+        <span className="text-[10px] font-bold px-2 py-0.5 rounded"
+          style={{ background: customer.tteDays <= 7 ? "rgba(248,113,113,0.15)" : customer.tteDays <= 14 ? "rgba(251,191,36,0.15)" : "rgba(34,211,238,0.15)",
+            color: urgencyColor }}>
           {urgency}
         </span>
       </div>
@@ -861,43 +986,43 @@ function RMPreCallBrief({ customer }: { customer: Customer }) {
       <div className="p-4 space-y-3">
         {/* Row 1: Stress Trigger + Call Window */}
         <div className="flex gap-3">
-          <div className="flex-1 p-3 rounded-lg" style={{ background: cat.bg, border: `1px solid ${cat.border}` }}>
+          <div className="flex-1 p-3 rounded-lg border" style={{ background: cat.bg, borderColor: cat.border }}>
             <div className="flex items-center gap-2 mb-1.5">
               <CatIcon className="w-3.5 h-3.5" style={{ color: cat.color }} />
-              <span style={{ fontSize: 9, fontWeight: 700, color: cat.color, letterSpacing: "0.1em" }}>STRESS TRIGGER — {cat.label.toUpperCase()}</span>
+              <span style={{ fontSize: 9, fontWeight: 700, color: cat.color, letterSpacing: "0.06em" }}>STRESS TRIGGER: {cat.label.toUpperCase()}</span>
             </div>
-            <p className="text-xs leading-relaxed" style={{ color: "rgba(255,255,255,0.85)" }}>{customer.stressTrigger}</p>
+            <p className="text-xs leading-relaxed text-slate-200">{customer.stressTrigger}</p>
             {customer.lifeEvent && (
-              <div className="mt-2 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full"
-                style={{ background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.3)" }}>
+              <div className="mt-2 inline-flex items-center gap-1.5 px-2 py-0.5 rounded"
+                style={{ background: "rgba(248,113,113,0.08)", border: "1px solid #FECACA" }}>
                 <AlertTriangle className="w-2.5 h-2.5 text-red-400" />
-                <span style={{ fontSize: 9, color: "#EF4444", fontWeight: 700 }}>{customer.lifeEvent}</span>
+                <span style={{ fontSize: 9, color: "#F87171", fontWeight: 700 }}>{customer.lifeEvent}</span>
               </div>
             )}
           </div>
-          <div className="w-44 p-3 rounded-lg" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
+          <div className="w-44 p-3 rounded-lg bg-white/[0.03] border border-white/[0.08]">
             <div className="flex items-center gap-1.5 mb-2">
-              <Clock className="w-3 h-3" style={{ color: "#00AEEF" }} />
-              <span style={{ fontSize: 9, fontWeight: 700, color: "#00AEEF", letterSpacing: "0.08em" }}>BEST CALL WINDOW</span>
+              <Clock className="w-3 h-3 text-cyan-400" />
+              <span style={{ fontSize: 9, fontWeight: 700, color: "#22D3EE", letterSpacing: "0.06em" }}>BEST CALL WINDOW</span>
             </div>
-            <div className="text-sm font-bold mb-1" style={{ color: "#F0F6FF" }}>{customer.callBestTime}</div>
+            <div className="text-sm font-bold mb-1 text-slate-100">{customer.callBestTime}</div>
             <div className="flex items-center gap-1.5">
-              <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.06)" }}>
-                <div className="h-full rounded-full" style={{ width: `${customer.callAnswerRate}%`, background: "linear-gradient(90deg,#00AEEF,#22C55E)" }} />
+              <div className="flex-1 h-1.5 rounded-full overflow-hidden bg-white/[0.06]">
+                <div className="h-full rounded-full bg-green-500/100" style={{ width: `${customer.callAnswerRate}%` }} />
               </div>
-              <span style={{ fontSize: 10, color: "#22C55E", fontWeight: 700 }}>{customer.callAnswerRate}%</span>
+              <span style={{ fontSize: 10, color: "#34D399", fontWeight: 700 }}>{customer.callAnswerRate}%</span>
             </div>
-            <div style={{ fontSize: 9, color: "rgba(255,255,255,0.35)", marginTop: 3 }}>historical answer rate</div>
+            <div style={{ fontSize: 9, color: "#64748B", marginTop: 3 }}>historical answer rate</div>
           </div>
         </div>
 
         {/* Row 2: Conversion Forecast */}
-        <div className="p-3 rounded-lg" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)" }}>
+        <div className="p-3 rounded-lg bg-white/[0.03] border border-white/[0.08]">
           <div className="flex items-center gap-2 mb-2.5">
-            <Target className="w-3.5 h-3.5" style={{ color: "#A855F7" }} />
-            <span style={{ fontSize: 9, fontWeight: 700, color: "#A855F7", letterSpacing: "0.1em" }}>POSITIVE OUTCOME FORECAST</span>
-            <span className="ml-auto text-[9px] font-bold" style={{ color: conversionDiff > 0.1 ? "#EF4444" : "#22C55E" }}>
-              {conversionDiff > 0.1 ? `↓${Math.round(conversionDiff * 100)}% worse if delayed` : "Timing not urgent"}
+            <Target className="w-3.5 h-3.5 text-violet-400" />
+            <span style={{ fontSize: 9, fontWeight: 700, color: "#A78BFA", letterSpacing: "0.06em" }}>POSITIVE OUTCOME FORECAST</span>
+            <span className="ml-auto text-[9px] font-bold" style={{ color: conversionDiff > 0.1 ? "#F87171" : "#34D399" }}>
+              {conversionDiff > 0.1 ? `${Math.round(conversionDiff * 100)}% worse if delayed` : "Timing not urgent"}
             </span>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -907,14 +1032,14 @@ function RMPreCallBrief({ customer }: { customer: Customer }) {
             ].map((item, i) => (
               <div key={i}>
                 <div className="flex justify-between items-center mb-1">
-                  <span style={{ fontSize: 10, color: "rgba(255,255,255,0.5)" }}>{item.label}</span>
-                  <span style={{ fontSize: 14, fontWeight: 800, color: item.color, fontFamily: "monospace" }}>
+                  <span className="text-[10px] text-slate-500">{item.label}</span>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: item.color, fontFamily: "monospace" }}>
                     {Math.round(item.value * 100)}%
                   </span>
                 </div>
-                <div className="h-2 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.06)" }}>
+                <div className="h-2 rounded-full overflow-hidden bg-white/[0.06]">
                   <div className="h-full rounded-full transition-all duration-700"
-                    style={{ width: `${item.value * 100}%`, background: item.color, opacity: 0.85 }} />
+                    style={{ width: `${item.value * 100}%`, background: item.color }} />
                 </div>
               </div>
             ))}
@@ -922,43 +1047,42 @@ function RMPreCallBrief({ customer }: { customer: Customer }) {
         </div>
 
         {/* Row 3: Empathy-First Opener */}
-        <div className="p-3 rounded-lg" style={{ background: "rgba(0,174,239,0.05)", border: "1px solid rgba(0,174,239,0.2)" }}>
+        <div className="p-3 rounded-lg bg-cyan-500/8 border border-cyan-500/20">
           <div className="flex items-center gap-2 mb-2">
-            <Phone className="w-3.5 h-3.5" style={{ color: "#00AEEF" }} />
-            <span style={{ fontSize: 9, fontWeight: 700, color: "#00AEEF", letterSpacing: "0.1em" }}>EMPATHY-FIRST OPENER</span>
-            <span style={{ fontSize: 9, color: "rgba(255,255,255,0.3)" }}>— do NOT lead with the missed payment</span>
+            <Phone className="w-3.5 h-3.5 text-cyan-400" />
+            <span style={{ fontSize: 9, fontWeight: 700, color: "#22D3EE", letterSpacing: "0.06em" }}>RECOMMENDED OPENER</span>
+            <span className="text-[9px] text-slate-400">Do not lead with the missed payment</span>
           </div>
-          <p className="text-xs leading-relaxed italic"
-            style={{ color: "rgba(255,255,255,0.88)", borderLeft: "2px solid rgba(0,174,239,0.4)", paddingLeft: 10 }}>
+          <p className="text-xs leading-relaxed italic text-slate-200"
+            style={{ borderLeft: "2px solid #0077B6", paddingLeft: 10 }}>
             &ldquo;{customer.aiOpener}&rdquo;
           </p>
         </div>
 
         {/* Row 4: Objection Playbook */}
         {customer.objections.length > 0 && (
-          <div className="rounded-lg overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.07)" }}>
+          <div className="rounded-lg overflow-hidden border border-white/[0.08]">
             <button onClick={() => setObjOpen(o => !o)}
-              className="w-full flex items-center justify-between px-3 py-2.5 text-left transition-all hover:bg-white/[0.02]"
-              style={{ background: "rgba(255,255,255,0.02)" }}>
+              className="w-full flex items-center justify-between px-3 py-2.5 text-left transition-all hover:bg-white/[0.03] bg-[#132337]">
               <div className="flex items-center gap-2">
-                <ShieldAlert className="w-3.5 h-3.5" style={{ color: "#F59E0B" }} />
-                <span style={{ fontSize: 9, fontWeight: 700, color: "#F59E0B", letterSpacing: "0.1em" }}>
+                <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
+                <span style={{ fontSize: 9, fontWeight: 700, color: "#FBBF24", letterSpacing: "0.06em" }}>
                   OBJECTION PLAYBOOK ({customer.objections.length} predicted)
                 </span>
               </div>
-              {objOpen ? <ChevronUp className="w-4 h-4 text-slate-500" /> : <ChevronDown className="w-4 h-4 text-slate-500" />}
+              {objOpen ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
             </button>
             {objOpen && (
-              <div style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+              <div className="border-t border-white/[0.06]">
                 {customer.objections.map((obj, i) => (
                   <div key={i} className="px-3 py-3 grid grid-cols-2 gap-3"
-                    style={{ borderBottom: i < customer.objections.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none" }}>
+                    style={{ borderBottom: i < customer.objections.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none" }}>
                     <div>
-                      <div style={{ fontSize: 9, color: "#EF4444", fontWeight: 700, marginBottom: 4 }}>CUSTOMER SAYS</div>
+                      <div style={{ fontSize: 9, color: "#F87171", fontWeight: 700, marginBottom: 4 }}>CUSTOMER SAYS</div>
                       <p className="text-xs text-slate-300 italic">&ldquo;{obj.q}&rdquo;</p>
                     </div>
                     <div>
-                      <div style={{ fontSize: 9, color: "#22C55E", fontWeight: 700, marginBottom: 4 }}>YOUR RESPONSE</div>
+                      <div style={{ fontSize: 9, color: "#34D399", fontWeight: 700, marginBottom: 4 }}>YOUR RESPONSE</div>
                       <p className="text-xs text-slate-300">{obj.a}</p>
                     </div>
                   </div>
@@ -970,15 +1094,14 @@ function RMPreCallBrief({ customer }: { customer: Customer }) {
 
         {/* Row 5: Compliance Guardrails */}
         {customer.guardrails.length > 0 && (
-          <div className="p-3 rounded-lg" style={{ background: "rgba(239,68,68,0.05)", border: "1px solid rgba(239,68,68,0.2)" }}>
+          <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/25">
             <div className="flex items-center gap-2 mb-2">
               <AlertTriangle className="w-3.5 h-3.5 text-red-400" />
-              <span style={{ fontSize: 9, fontWeight: 700, color: "#EF4444", letterSpacing: "0.1em" }}>REGULATORY GUARDRAILS — DO NOT MENTION</span>
+              <span style={{ fontSize: 9, fontWeight: 700, color: "#F87171", letterSpacing: "0.06em" }}>REGULATORY GUARDRAILS — DO NOT MENTION</span>
             </div>
             <div className="flex flex-wrap gap-1.5">
               {customer.guardrails.map((g, i) => (
-                <span key={i} className="text-[10px] px-2 py-0.5 rounded font-medium"
-                  style={{ background: "rgba(239,68,68,0.1)", color: "#FCA5A5", border: "1px solid rgba(239,68,68,0.2)" }}>
+                <span key={i} className="text-[10px] px-2 py-0.5 rounded font-medium bg-red-100 text-red-400 border border-red-500/25">
                   ✕ {g}
                 </span>
               ))}
@@ -991,7 +1114,7 @@ function RMPreCallBrief({ customer }: { customer: Customer }) {
 }
 
 // ═══════════════════════════════════════════════
-// VIEW 3: RM / COLLECTIONS (with LIVE scoring)
+// VIEW: RELATIONSHIP MANAGER (Analyst)
 // ═══════════════════════════════════════════════
 function RMView({ selectedCustomer, scoreCustomerLive, liveScoreResult, scoringInProgress, backendOnline }: {
   selectedCustomer: Customer | null;
@@ -1006,34 +1129,34 @@ function RMView({ selectedCustomer, scoreCustomerLive, liveScoreResult, scoringI
     <div className="p-5 flex gap-4" style={{ height: "calc(100vh - 56px)" }}>
       {/* Queue Panel */}
       <div className="glass-panel p-5 w-80 shrink-0 flex flex-col">
-        <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/[0.07]">
-          <h3 className="text-sm font-semibold">🚨 Urgency Queue</h3>
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-red-500/12 text-red-400">{queue.length} pending</span>
+        <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/[0.06]">
+          <h3 className="text-sm font-semibold text-slate-100">Priority Queue</h3>
+          <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/25">{queue.length} pending</span>
         </div>
-        <p className="text-[10px] text-cyan-400/60 mb-3">
-          {backendOnline ? "🟢 Click to score via real ML" : "⚪ Click for simulated data"}
+        <p className="text-[10px] text-slate-400 mb-3">
+          {backendOnline ? "Click to score via ML engine" : "Click for simulated data"}
         </p>
         <div className="space-y-2 overflow-y-auto flex-1">
           {queue.map(c => (
             <button key={c.id} onClick={() => scoreCustomerLive(c)}
-              className={`w-full text-left p-3 rounded-lg bg-white/[0.02] border transition-all ${
-                selectedCustomer?.id === c.id ? "border-cyan-500/50 bg-cyan-500/[0.06]" : "border-transparent hover:border-cyan-500/30 hover:bg-cyan-500/[0.03]"}`}>
+              className={`w-full text-left p-3 rounded-lg border transition-all ${
+                selectedCustomer?.id === c.id ? "border-blue-400 bg-cyan-500/8" : "border-white/[0.06] hover:border-blue-300 hover:bg-white/[0.03]"}`}>
               <div className="flex items-center justify-between mb-1.5">
-                <span className="text-sm font-semibold">{c.name}</span>
+                <span className="text-sm font-semibold text-slate-100">{c.name}</span>
                 <span className={`text-xs font-bold font-mono ${c.riskScore >= 0.7 ? "text-red-400" : "text-amber-400"}`}>{c.riskScore.toFixed(2)}</span>
               </div>
               <div className="flex gap-1.5 flex-wrap">
-                <span className="text-[9px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 font-semibold">TTE: {c.tteDays}d</span>
-                <span className="text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 font-semibold">Uplift: {c.upliftScore.toFixed(2)}</span>
-                <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-400 font-semibold">{c.segment}</span>
+                <span className="text-[9px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 font-semibold border border-red-500/25">TTE: {c.tteDays}d</span>
+                <span className="text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/8 text-cyan-400 font-semibold border border-cyan-500/25">Uplift: {c.upliftScore.toFixed(2)}</span>
+                <span className="text-[9px] px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-400 font-semibold border border-violet-500/25">{c.segment}</span>
               </div>
               {/* Brief conversion hint */}
               {c.riskTier !== "stable" && (
                 <div className="mt-1.5 flex items-center gap-1.5">
-                  <span style={{ fontSize: 9, color: c.callConversionToday >= 0.6 ? "#22C55E" : "#F59E0B" }}>
-                    ◆ {Math.round(c.callConversionToday * 100)}% conversion today
+                  <span style={{ fontSize: 9, color: c.callConversionToday >= 0.6 ? "#34D399" : "#FBBF24" }}>
+                    {Math.round(c.callConversionToday * 100)}% conversion today
                   </span>
-                  <span style={{ fontSize: 9, color: "#64748b" }}>• {c.callBestTime.split("(")[0].trim()}</span>
+                  <span className="text-[9px] text-slate-400">{c.callBestTime.split("(")[0].trim()}</span>
                 </div>
               )}
             </button>
@@ -1043,50 +1166,50 @@ function RMView({ selectedCustomer, scoreCustomerLive, liveScoreResult, scoringI
 
       {/* Customer 360° + AI Brief */}
       <div className="glass-panel p-5 flex-1 overflow-y-auto">
-        <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/[0.07]">
-          <h3 className="text-sm font-semibold">👤 Customer 360° + AI Brief</h3>
+        <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/[0.06]">
+          <h3 className="text-sm font-semibold text-slate-100">Customer 360 &mdash; Intelligence Brief</h3>
           {selectedCustomer && selectedCustomer.riskTier !== "stable" && (
-            <span style={{ fontSize: 9, color: "rgba(0,174,239,0.7)", fontWeight: 600 }}>
-              AI brief auto-generated from SHAP + transaction patterns
+            <span className="text-[9px] text-slate-400 font-medium">
+              Auto-generated from SHAP + transaction patterns
             </span>
           )}
         </div>
 
         {!selectedCustomer ? (
-          <div className="flex flex-col items-center justify-center h-96 gap-3 text-slate-500">
-            <div style={{ fontSize: 40 }}>←</div>
-            <p className="text-sm">Select a customer from the queue to see their AI brief</p>
+          <div className="flex flex-col items-center justify-center h-96 gap-3 text-slate-400">
+            <Users className="w-10 h-10 text-slate-300" />
+            <p className="text-sm">Select a customer from the queue to view their intelligence brief</p>
           </div>
         ) : scoringInProgress ? (
-          <div className="flex items-center justify-center h-96 text-cyan-400 animate-pulse">🧠 Scoring via ML Ensemble...</div>
+          <div className="flex items-center justify-center h-96 text-cyan-400">Scoring via ML Ensemble...</div>
         ) : (
           <div className="space-y-4 animate-fade-in-up">
             {/* Customer Header */}
             <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-full bg-gradient-to-br from-cyan-400 to-purple-600 flex items-center justify-center text-lg font-bold shrink-0">
+              <div className="w-14 h-14 rounded-full bg-slate-700 flex items-center justify-center text-lg font-bold shrink-0 text-white">
                 {selectedCustomer.name.charAt(0)}
               </div>
               <div className="flex-1">
                 <div className="flex items-center gap-3 flex-wrap">
-                  <h4 className="text-lg font-bold">{selectedCustomer.name}</h4>
+                  <h4 className="text-lg font-bold text-slate-100">{selectedCustomer.name}</h4>
                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
                     selectedCustomer.riskTier === "critical" ? "badge-critical" :
                     selectedCustomer.riskTier === "watch" ? "badge-watch" : "badge-stable"
                   }`}>{selectedCustomer.riskTier.toUpperCase()}</span>
                   {selectedCustomer.lifeEvent && (
-                    <span style={{ fontSize: 9, color: "#EF4444", fontWeight: 700, padding: "2px 6px",
-                      background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 4 }}>
-                      ⚠ {selectedCustomer.lifeEvent}
+                    <span style={{ fontSize: 9, color: "#F87171", fontWeight: 700, padding: "2px 6px",
+                      background: "rgba(248,113,113,0.08)", border: "1px solid #FECACA", borderRadius: 4 }}>
+                      {selectedCustomer.lifeEvent}
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-slate-400 mt-0.5">{selectedCustomer.occupation} • {selectedCustomer.city} • Age {selectedCustomer.age} • ₹{selectedCustomer.salary.toLocaleString()}/mo</p>
+                <p className="text-xs text-slate-500 mt-0.5">{selectedCustomer.occupation} &middot; {selectedCustomer.city} &middot; Age {selectedCustomer.age} &middot; ₹{selectedCustomer.salary.toLocaleString()}/mo</p>
               </div>
               <div className="text-right shrink-0">
-                <div className={`text-3xl font-extrabold font-mono ${selectedCustomer.riskScore >= 0.7 ? "text-red-400" : "text-amber-400"}`}>
+                <div className={`text-3xl font-bold font-mono ${selectedCustomer.riskScore >= 0.7 ? "text-red-400" : "text-amber-400"}`}>
                   {(liveScoreResult?.risk_score ?? selectedCustomer.riskScore).toFixed(2)}
                 </div>
-                <div className="text-[10px] text-slate-500 uppercase tracking-wider">Risk Score</div>
+                <div className="text-[10px] text-slate-400 uppercase tracking-wider">Risk Score</div>
               </div>
             </div>
 
@@ -1096,43 +1219,43 @@ function RMView({ selectedCustomer, scoreCustomerLive, liveScoreResult, scoringI
             {/* Key Metrics */}
             <div className="grid grid-cols-4 gap-3">
               {[
-                { val: (liveScoreResult?.credit_score_mapped ?? selectedCustomer.creditScore).toString(), label: "Credit Score", cls: "text-cyan-400" },
-                { val: `${liveScoreResult?.tte_days ?? selectedCustomer.tteDays}d`, label: "Time-To-Event", cls: (liveScoreResult?.tte_days ?? selectedCustomer.tteDays) <= 10 ? "text-red-400" : "text-amber-400" },
-                { val: (liveScoreResult?.uplift_score ?? selectedCustomer.upliftScore).toFixed(2), label: "Uplift Score", cls: "text-green-400" },
-                { val: `${Math.round(selectedCustomer.callConversionToday * 100)}%`, label: "Call Conversion", cls: "text-purple-400" },
+                { val: (liveScoreResult?.credit_score_mapped ?? selectedCustomer.creditScore).toString(), label: "Credit Score", color: "#22D3EE" },
+                { val: `${liveScoreResult?.tte_days ?? selectedCustomer.tteDays}d`, label: "Time-To-Event", color: (liveScoreResult?.tte_days ?? selectedCustomer.tteDays) <= 10 ? "#F87171" : "#FBBF24" },
+                { val: (liveScoreResult?.uplift_score ?? selectedCustomer.upliftScore).toFixed(2), label: "Uplift Score", color: "#34D399" },
+                { val: `${Math.round(selectedCustomer.callConversionToday * 100)}%`, label: "Call Conversion", color: "#A78BFA" },
               ].map((m, i) => (
-                <div key={i} className="p-3 rounded-lg bg-white/[0.03] text-center">
-                  <div className={`text-xl font-extrabold font-mono ${m.cls}`}>{m.val}</div>
-                  <div className="text-[10px] text-slate-500 uppercase tracking-wider mt-1">{m.label}</div>
+                <div key={i} className="p-3 rounded-lg bg-white/[0.03] text-center border border-white/[0.06]">
+                  <div className="text-xl font-bold font-mono" style={{ color: m.color }}>{m.val}</div>
+                  <div className="text-[10px] text-slate-400 uppercase tracking-wider mt-1">{m.label}</div>
                 </div>
               ))}
             </div>
 
             {/* Live ML Results */}
             {liveScoreResult && (
-              <div className="p-4 rounded-xl bg-green-500/[0.06] border border-green-500/20">
-                <h5 className="text-[11px] uppercase tracking-wider text-green-400 mb-3 font-semibold">🟢 LIVE ML ENSEMBLE (localhost:8000/score)</h5>
+              <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/25">
+                <h5 className="text-[11px] uppercase tracking-wider text-emerald-400 mb-3 font-semibold">LIVE ML ENSEMBLE RESULTS</h5>
                 <div className="grid grid-cols-4 gap-2">
                   {[
-                    { val: liveScoreResult.risk_score.toFixed(3), label: "Ensemble", cls: "text-cyan-400" },
-                    { val: liveScoreResult.xgboost_score?.toFixed(3) ?? "N/A", label: "XGBoost", cls: "text-purple-400" },
-                    { val: liveScoreResult.lightgbm_score?.toFixed(3) ?? "N/A", label: "LightGBM", cls: "text-amber-400" },
-                    { val: liveScoreResult.lstm_score?.toFixed(3) ?? "N/A", label: "LSTM", cls: "text-pink-400" },
+                    { val: liveScoreResult.risk_score.toFixed(3), label: "Ensemble", color: "#22D3EE" },
+                    { val: liveScoreResult.xgboost_score?.toFixed(3) ?? "N/A", label: "XGBoost", color: "#A78BFA" },
+                    { val: liveScoreResult.lightgbm_score?.toFixed(3) ?? "N/A", label: "LightGBM", color: "#FBBF24" },
+                    { val: liveScoreResult.lstm_score?.toFixed(3) ?? "N/A", label: "LSTM", color: "#F472B6" },
                   ].map((item, i) => (
-                    <div key={i} className="p-2 rounded-lg bg-white/[0.03] text-center">
-                      <div className={`text-base font-extrabold font-mono ${item.cls}`}>{item.val}</div>
+                    <div key={i} className="p-2 rounded-lg bg-white/[0.03] text-center border border-green-500/20">
+                      <div className="text-base font-bold font-mono" style={{ color: item.color }}>{item.val}</div>
                       <div className="text-[9px] text-slate-500 uppercase">{item.label}</div>
                     </div>
                   ))}
                 </div>
                 {liveScoreResult.top_shap_features && liveScoreResult.top_shap_features.length > 0 && (
                   <div className="mt-3 space-y-1">
-                    <div className="text-[10px] text-green-400/60 uppercase tracking-wider mb-1.5">Real SHAP Features</div>
+                    <div className="text-[10px] text-emerald-400 uppercase tracking-wider mb-1.5">Live SHAP Features</div>
                     {liveScoreResult.top_shap_features.slice(0, 4).map((f, i) => (
                       <div key={i} className="flex items-center gap-3 text-xs">
                         <span className="w-40 text-slate-300 font-mono truncate">{f.feature}</span>
-                        <div className="flex-1 h-1.5 bg-white/[0.04] rounded-full overflow-hidden">
-                          <div className={`h-full rounded-full ${f.value >= 0 ? "bg-red-500" : "bg-cyan-500"}`} style={{ width: `${Math.min(Math.abs(f.value) * 500, 100)}%` }} />
+                        <div className="flex-1 h-1.5 bg-white/[0.05] rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full ${f.value >= 0 ? "bg-red-500/100" : "bg-cyan-500/80"}`} style={{ width: `${Math.min(Math.abs(f.value) * 500, 100)}%` }} />
                         </div>
                         <span className={`font-bold font-mono w-12 text-right text-[11px] ${f.value >= 0 ? "text-red-400" : "text-cyan-400"}`}>
                           {f.value >= 0 ? "+" : ""}{f.value.toFixed(3)}
@@ -1146,14 +1269,14 @@ function RMView({ selectedCustomer, scoreCustomerLive, liveScoreResult, scoringI
 
             {/* SHAP (simulated) */}
             {!liveScoreResult && (
-              <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.07]">
-                <h5 className="text-[11px] uppercase tracking-wider text-slate-400 mb-3 font-semibold">🔍 SHAP Drivers (Simulated)</h5>
+              <div className="p-4 rounded-lg bg-white/[0.03] border border-white/[0.08]">
+                <h5 className="text-[11px] uppercase tracking-wider text-slate-500 mb-3 font-semibold">SHAP Risk Drivers (Simulated)</h5>
                 <div className="space-y-2">
                   {selectedCustomer.shapDrivers.map((d, i) => (
                     <div key={i} className="flex items-center gap-3 text-xs">
                       <span className="w-44 text-slate-300 font-mono truncate">{d.feature}</span>
-                      <div className="flex-1 h-1.5 bg-white/[0.04] rounded-full overflow-hidden">
-                        <div className={`h-full rounded-full ${d.value >= 0 ? "bg-red-500" : "bg-cyan-500"}`} style={{ width: `${Math.abs(d.value) * 500}%` }} />
+                      <div className="flex-1 h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full ${d.value >= 0 ? "bg-red-500/100" : "bg-cyan-500/80"}`} style={{ width: `${Math.abs(d.value) * 500}%` }} />
                       </div>
                       <span className={`font-bold font-mono w-12 text-right ${d.value >= 0 ? "text-red-400" : "text-cyan-400"}`}>{d.value >= 0 ? "+" : ""}{d.value.toFixed(2)}</span>
                     </div>
@@ -1164,13 +1287,13 @@ function RMView({ selectedCustomer, scoreCustomerLive, liveScoreResult, scoringI
 
             {/* Counterfactuals */}
             {selectedCustomer.counterfactuals.length > 0 && (
-              <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.07]">
-                <h5 className="text-[11px] uppercase tracking-wider text-slate-400 mb-3 font-semibold">🔄 Counterfactuals — Risk Reduction Paths</h5>
+              <div className="p-4 rounded-lg bg-white/[0.03] border border-white/[0.08]">
+                <h5 className="text-[11px] uppercase tracking-wider text-slate-500 mb-3 font-semibold">Counterfactual Analysis &mdash; Risk Reduction Paths</h5>
                 <div className="space-y-2">
                   {selectedCustomer.counterfactuals.map((cf, i) => (
-                    <div key={i} className="flex items-center justify-between py-2 border-b border-white/[0.05] last:border-0 text-xs">
+                    <div key={i} className="flex items-center justify-between py-2 border-b border-white/[0.06] last:border-0 text-xs">
                       <span className="text-slate-300">{cf.action}</span>
-                      <span className="text-green-400 font-bold font-mono">{cf.newScore}</span>
+                      <span className="text-emerald-400 font-bold font-mono">{cf.newScore}</span>
                     </div>
                   ))}
                 </div>
@@ -1179,14 +1302,14 @@ function RMView({ selectedCustomer, scoreCustomerLive, liveScoreResult, scoringI
 
             {/* Full GenAI Script */}
             {selectedCustomer.genaiScript && (
-              <div className="p-4 rounded-xl bg-purple-500/[0.06] border border-purple-500/20">
-                <h5 className="text-[11px] uppercase tracking-wider text-purple-400 mb-3 font-semibold">✨ Full Call Script (Groq LLM)</h5>
-                <p className="text-sm text-slate-300 leading-relaxed italic border-l-[3px] border-purple-500 pl-4">
+              <div className="p-4 rounded-lg bg-violet-500/10 border border-violet-500/25">
+                <h5 className="text-[11px] uppercase tracking-wider text-violet-400 mb-3 font-semibold">Full Call Script (LLM Generated)</h5>
+                <p className="text-sm text-slate-300 leading-relaxed italic border-l-[3px] border-violet-400 pl-4">
                   &ldquo;{selectedCustomer.genaiScript}&rdquo;
                 </p>
                 <div className="flex gap-2 mt-3 flex-wrap">
                   {selectedCustomer.offers.map((o, i) => (
-                    <span key={i} className="text-[11px] px-3 py-1 rounded-full bg-green-500/10 text-green-400 border border-green-500/20 font-medium">{o}</span>
+                    <span key={i} className="text-[11px] px-3 py-1 rounded bg-green-500/10 text-emerald-400 border border-green-500/25 font-medium">{o}</span>
                   ))}
                 </div>
               </div>
@@ -1199,7 +1322,7 @@ function RMView({ selectedCustomer, scoreCustomerLive, liveScoreResult, scoringI
 }
 
 // ═══════════════════════════════════════════════
-// VIEW 4: CUSTOMER APP (with real /notify)
+// VIEW: CUSTOMER SERVICE (Self-Service Portal)
 // ═══════════════════════════════════════════════
 function CustomerView({ serveResult, triggerRealNotify, notifyResult, backendOnline }: {
   serveResult: string;
@@ -1208,40 +1331,41 @@ function CustomerView({ serveResult, triggerRealNotify, notifyResult, backendOnl
   backendOnline: boolean | null;
 }) {
   const nudges = [
-    { day: 0, ch: "💬 WhatsApp", msg: "Hi Sarah, we noticed some changes in your spending. We're here to help — reply HELP for options.", status: "✅ Delivered • Opened", done: true, active: false },
-    { day: 3, ch: "🔔 App Push", msg: "Your personalized financial wellness report is ready.", status: "✅ Delivered • Tapped", done: true, active: false },
-    { day: 5, ch: "📱 SMS", msg: "Barclays: Good news! You're pre-approved for a 3-month EMI holiday. Tap to accept → barclays.in/emi", status: "📨 Just now", done: false, active: true },
-    { day: 10, ch: "📞 RM Call", msg: "Escalation — Relationship Manager callback scheduled", status: "🔜 Pending", done: false, active: false },
+    { day: 0, ch: "WhatsApp", msg: "Hi Sarah, we noticed some changes in your spending. We're here to help — reply HELP for options.", status: "Delivered, Opened", done: true, active: false },
+    { day: 3, ch: "App Push", msg: "Your personalized financial wellness report is ready.", status: "Delivered, Tapped", done: true, active: false },
+    { day: 5, ch: "SMS", msg: "Barclays: Good news! You're pre-approved for a 3-month EMI holiday. Tap to accept.", status: "Just now", done: false, active: true },
+    { day: 10, ch: "RM Call", msg: "Escalation — Relationship Manager callback scheduled", status: "Pending", done: false, active: false },
   ];
 
   return (
     <div className="p-5 flex gap-6 justify-center" style={{ height: "calc(100vh - 56px)" }}>
       {/* Mobile Simulator */}
       <div className="w-[380px] shrink-0">
-        <div className="bg-[#111] rounded-[40px] p-3 border-2 border-[#333] shadow-[0_20px_60px_rgba(0,0,0,0.5)]">
-          <div className="w-28 h-1.5 bg-[#222] rounded-full mx-auto mb-2" />
-          <div className="bg-[#060a14] rounded-[28px] overflow-y-auto" style={{ maxHeight: "calc(100vh - 170px)" }}>
-            <div className="flex justify-between px-5 py-3 text-xs font-semibold bg-cyan-500/[0.06] border-b border-white/[0.07]">
-              <span>🏦 Barclays</span>
+        <div className="bg-[#0a0f1a] rounded-[40px] p-3 border-2 border-white/[0.1] shadow-xl">
+          <div className="w-28 h-1.5 bg-white/[0.1] rounded-full mx-auto mb-2" />
+          <div className="bg-[#0e1726] rounded-[28px] overflow-y-auto" style={{ maxHeight: "calc(100vh - 170px)" }}>
+            <div className="flex justify-between px-5 py-3 text-xs font-semibold border-b border-white/[0.08]"
+              style={{ background: "#0a1525", color: "white", borderRadius: "28px 28px 0 0" }}>
+              <span>Barclays</span>
               <span className="font-mono">{new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false })}</span>
             </div>
             <div className="p-5">
-              <h3 className="text-xl font-bold mb-1">Hi Sarah 👋</h3>
+              <h3 className="text-xl font-bold mb-1 text-white">Hello Sarah</h3>
               <p className="text-xs text-slate-400 mb-5">Your financial wellness dashboard</p>
 
               {/* Nudge Timeline */}
               <div className="space-y-0 mb-5">
                 {nudges.map((n, i) => (
-                  <div key={i} className={`flex gap-3 pl-2 pb-4 border-l-2 ml-2 relative ${i === nudges.length - 1 ? "border-l-transparent" : "border-l-white/[0.07]"}`}>
+                  <div key={i} className={`flex gap-3 pl-2 pb-4 border-l-2 ml-2 relative ${i === nudges.length - 1 ? "border-l-transparent" : "border-l-slate-200"}`}>
                     <div className={`absolute -left-[6px] top-1 w-3 h-3 rounded-full border-2 ${
-                      n.done ? "bg-green-400 border-green-400" : n.active ? "bg-cyan-400 border-cyan-400 animate-pulse" : "bg-slate-600 border-slate-600"}`} />
+                      n.done ? "bg-green-500/100 border-green-500" : n.active ? "bg-cyan-500/80 border-blue-500" : "bg-slate-300 border-slate-300"}`} />
                     <div className="ml-3">
                       <div className="flex gap-2 text-[10px] mb-1">
                         <span className="text-cyan-400 font-bold">Day {n.day}</span>
                         <span className="text-slate-400">{n.ch}</span>
                       </div>
                       <p className="text-xs text-slate-300 leading-relaxed mb-1">{n.msg}</p>
-                      <span className="text-[10px] text-slate-500">{n.status}</span>
+                      <span className="text-[10px] text-slate-400">{n.status}</span>
                     </div>
                   </div>
                 ))}
@@ -1249,33 +1373,33 @@ function CustomerView({ serveResult, triggerRealNotify, notifyResult, backendOnl
 
               {/* Self-Serve Actions — trigger real /notify */}
               <div>
-                <h4 className="text-xs font-semibold text-slate-400 mb-3">
-                  Quick Actions {backendOnline ? <span className="text-green-400">(🟢 triggers real /notify API)</span> : <span className="text-amber-400">(⚪ simulated)</span>}
+                <h4 className="text-xs font-semibold text-slate-500 mb-3">
+                  Quick Actions {backendOnline ? <span className="text-emerald-400">(Live API)</span> : <span className="text-amber-400">(Simulated)</span>}
                 </h4>
-                <button onClick={() => triggerRealNotify("EMI Holiday (3 months)")} className="w-full text-left p-3 mb-2 rounded-lg bg-green-500/10 border border-green-500/30 text-green-400 text-xs font-semibold hover:bg-green-500/20 transition-all">
-                  ✅ Accept EMI Holiday (3 months)
+                <button onClick={() => triggerRealNotify("EMI Holiday (3 months)")} className="w-full text-left p-3 mb-2 rounded-lg bg-green-500/10 border border-green-500/25 text-emerald-400 text-xs font-semibold hover:bg-green-100 transition-all">
+                  Accept EMI Holiday (3 months)
                 </button>
-                <button onClick={() => triggerRealNotify("EMI Restructuring (12 months)")} className="w-full text-left p-3 mb-2 rounded-lg bg-white/[0.04] border border-white/[0.07] text-xs font-medium hover:border-cyan-500/30 transition-all">
-                  📋 Restructure EMI (extend 12 months)
+                <button onClick={() => triggerRealNotify("EMI Restructuring (12 months)")} className="w-full text-left p-3 mb-2 rounded-lg bg-white/[0.03] border border-white/[0.08] text-slate-200 text-xs font-medium hover:border-blue-300 transition-all">
+                  Restructure EMI (extend 12 months)
                 </button>
-                <button onClick={() => triggerRealNotify("RM Callback")} className="w-full text-left p-3 rounded-lg bg-white/[0.04] border border-white/[0.07] text-xs font-medium hover:border-cyan-500/30 transition-all">
-                  📞 Schedule RM Callback
+                <button onClick={() => triggerRealNotify("RM Callback")} className="w-full text-left p-3 rounded-lg bg-white/[0.03] border border-white/[0.08] text-slate-200 text-xs font-medium hover:border-blue-300 transition-all">
+                  Schedule RM Callback
                 </button>
                 {serveResult && (
-                  <div className="mt-3 p-3 rounded-lg bg-green-500/[0.08] border border-green-500/20 text-xs text-green-400 animate-fade-in-up">
+                  <div className="mt-3 p-3 rounded-lg bg-green-500/10 border border-green-500/25 text-xs text-emerald-400 animate-fade-in-up">
                     {serveResult}
                   </div>
                 )}
               </div>
             </div>
           </div>
-          <div className="w-24 h-1 bg-[#444] rounded-full mx-auto mt-2" />
+          <div className="w-24 h-1 bg-white/[0.15] rounded-full mx-auto mt-2" />
         </div>
       </div>
 
       {/* Info Panel */}
       <div className="glass-panel p-5 flex-1 max-w-xl">
-        <h3 className="text-sm font-semibold mb-4 pb-3 border-b border-white/[0.07]">📋 Nudge Journey Details</h3>
+        <h3 className="text-sm font-semibold mb-4 pb-3 border-b border-white/[0.06] text-slate-100">Nudge Journey Details</h3>
         <div className="space-y-0">
           {[
             ["Customer", "Sarah Menon (CUST-4821)"],
@@ -1288,26 +1412,26 @@ function CustomerView({ serveResult, triggerRealNotify, notifyResult, backendOnl
             ["Product Offer", "EMI Holiday (3 months, pre-approved)"],
             ["Estimated Savings", "₹42,000 (reduced default risk)"],
           ].map(([label, value, isCritical], i) => (
-            <div key={i} className="flex justify-between py-2.5 border-b border-white/[0.05] text-xs">
-              <span className="text-slate-400">{label}</span>
-              <span className={`font-medium ${isCritical ? "text-red-400 font-bold" : ""}`}>{value}</span>
+            <div key={i} className="flex justify-between py-2.5 border-b border-white/[0.06] text-xs">
+              <span className="text-slate-500">{label}</span>
+              <span className={`font-medium ${isCritical ? "text-red-400 font-bold" : "text-slate-200"}`}>{value}</span>
             </div>
           ))}
         </div>
 
         {/* Real Notify API response */}
         {notifyResult && (
-          <div className="mt-4 p-4 rounded-xl bg-green-500/[0.06] border border-green-500/20">
-            <h5 className="text-[11px] uppercase tracking-wider text-green-400 mb-2 font-semibold">🟢 Real /notify API Response</h5>
+          <div className="mt-4 p-4 rounded-lg bg-green-500/10 border border-green-500/25">
+            <h5 className="text-[11px] uppercase tracking-wider text-emerald-400 mb-2 font-semibold">Live API Response</h5>
             <pre className="text-[11px] text-slate-300 font-mono overflow-x-auto whitespace-pre-wrap">
               {JSON.stringify(notifyResult, null, 2)}
             </pre>
           </div>
         )}
 
-        <div className="mt-5 p-4 rounded-xl bg-purple-500/[0.06] border border-purple-500/15">
+        <div className="mt-5 p-4 rounded-lg bg-cyan-500/8 border border-cyan-500/20">
           <p className="text-xs text-slate-300 leading-relaxed">
-            🤖 <strong className="text-purple-400">LinUCB Bandit Decision:</strong> WhatsApp selected as Day 0 channel because Sarah&apos;s demographic
+            <strong className="text-cyan-400">LinUCB Bandit Decision:</strong> WhatsApp selected as Day 0 channel because Sarah&apos;s demographic
             (Female, 28-35, Urban, Tech-savvy) has <strong>68% WhatsApp response rate</strong> vs 32% Email.
           </p>
         </div>

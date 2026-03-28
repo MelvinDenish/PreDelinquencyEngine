@@ -19,17 +19,17 @@ import Link from "next/link";
 
 // ─── Barclays brand colours ───────────────────────────────────────────────────
 const B = {
-  navy:       "#00395D",
+  navy:       "#0B1929",
   blue:       "#00AEEF",
-  lightBlue:  "#6EC6E6",
-  darkNavy:   "#002C6C",
-  white:      "#FFFFFF",
-  surface:    "#0A1628",
-  card:       "#0D1F35",
-  cardBorder: "rgba(0,174,239,0.15)",
-  stable:     "#22C55E",
-  watch:      "#F59E0B",
-  critical:   "#EF4444",
+  lightBlue:  "#22D3EE",
+  darkNavy:   "#0a1525",
+  white:      "#F8FAFC",
+  surface:    "#0B1929",
+  card:       "#132337",
+  cardBorder: "#243B53",
+  stable:     "#34D399",
+  watch:      "#FBBF24",
+  critical:   "#F87171",
   muted:      "#94A3B8",
 };
 
