@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDI Engine | Enterprise Dashboard</title>
+<meta name="description" content="Pre-Delinquency Intervention Engine — Enterprise Operations Dashboard">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+<!-- ═══ TOP BAR ═══ -->
+<header id="topbar">
+  <div class="topbar-left">
+    <div class="logo"><svg width="24" height="24" viewBox="0 0 28 28" fill="none"><circle cx="14" cy="14" r="12" stroke="url(#g1)" stroke-width="2.5"/><path d="M9 14l3 3 7-7" stroke="url(#g1)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><defs><linearGradient id="g1" x1="0" y1="0" x2="28" y2="28"><stop stop-color="#00D4FF"/><stop offset="1" stop-color="#7B2FFF"/></linearGradient></defs></svg></div>
+    <span class="brand">PDI Engine</span>
+    <span class="badge">ENTERPRISE</span>
+  </div>
+  <div class="topbar-center">
+    <button class="view-tab active" data-view="godmode" onclick="switchView('godmode')">⚡ God Mode</button>
+    <button class="view-tab" data-view="executive" onclick="switchView('executive')">📊 Executive</button>
+    <button class="view-tab" data-view="rm" onclick="switchView('rm')">👨‍💼 RM View</button>
+    <button class="view-tab" data-view="customer" onclick="switchView('customer')">📱 Customer</button>
+  </div>
+  <div class="topbar-right">
+    <div class="live-dot"></div>
+    <span class="live-label">LIVE</span>
+    <span class="clock" id="clock">00:00:00</span>
+  </div>
+</header>
+
+<!-- ═══════════════ VIEW 1: GOD MODE SIMULATOR ═══════════════ -->
+<section id="view-godmode" class="view active">
+  <!-- Metric Tickers -->
+  <div class="ticker-bar">
+    <div class="ticker"><span class="ticker-val" id="tk-txns">0</span><span class="ticker-label">Transactions Ingested</span></div>
+    <div class="ticker"><span class="ticker-val" id="tk-features">0</span><span class="ticker-label">Features Computed</span></div>
+    <div class="ticker"><span class="ticker-val" id="tk-scores">0</span><span class="ticker-label">Risk Scores Updated</span></div>
+    <div class="ticker"><span class="ticker-val" id="tk-interventions">0</span><span class="ticker-label">Interventions Triggered</span></div>
+    <div class="ticker"><span class="ticker-val" id="tk-latency">47ms</span><span class="ticker-label">Avg Latency</span></div>
+  </div>
+  <div class="godmode-grid">
+    <!-- Pipeline Status Graph -->
+    <div class="panel pipeline-panel">
+      <div class="panel-header"><h3>🔗 Pipeline Status</h3><span class="pulse-badge">ACTIVE</span></div>
+      <div class="pipeline-graph" id="pipeline-graph">
+        <div class="pg-row">
+          <div class="pg-node pg-active" id="pg-cbs">🏦 CBS</div>
+          <div class="pg-arrow">→</div>
+          <div class="pg-node pg-active" id="pg-kafka">📨 Kafka</div>
+          <div class="pg-arrow">→</div>
+          <div class="pg-node" id="pg-flink">⚡ Flink</div>
+        </div>
+        <div class="pg-row">
+          <div class="pg-node" id="pg-spark">📦 Spark</div>
+          <div class="pg-arrow">→</div>
+          <div class="pg-node" id="pg-redis">🔴 Redis</div>
+          <div class="pg-arrow">→</div>
+          <div class="pg-node" id="pg-ml">🧠 ML Ensemble</div>
+        </div>
+        <div class="pg-row">
+          <div class="pg-node" id="pg-shap">🔍 SHAP</div>
+          <div class="pg-arrow">→</div>
+          <div class="pg-node" id="pg-genai">✨ GenAI</div>
+          <div class="pg-arrow">→</div>
+          <div class="pg-node" id="pg-dispatch">📨 Dispatcher</div>
+        </div>
+      </div>
+    </div>
+    <!-- Live Event Stream -->
+    <div class="panel stream-panel">
+      <div class="panel-header"><h3>📡 Live Event Stream</h3><span class="stream-count" id="stream-count">0 events</span></div>
+      <div class="event-stream" id="event-stream"></div>
+    </div>
+    <!-- Recent Scores -->
+    <div class="panel scores-panel">
+      <div class="panel-header"><h3>🎯 Recent Scores</h3></div>
+      <div class="scores-list" id="scores-list"></div>
+    </div>
+    <!-- Interventions Log -->
+    <div class="panel interventions-panel">
+      <div class="panel-header"><h3>📨 Interventions Dispatched</h3></div>
+      <div class="interventions-list" id="interventions-list"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ VIEW 2: EXECUTIVE PORTFOLIO ═══════════════ -->
+<section id="view-executive" class="view">
+  <div class="exec-grid">
+    <!-- Risk Migration -->
+    <div class="panel exec-wide">
+      <div class="panel-header"><h3>📈 Risk Migration Matrix (90-day)</h3></div>
+      <div class="risk-migration" id="risk-migration">
+        <div class="migration-row"><span class="mig-label">Stable → Watch</span><div class="mig-bar"><div class="mig-fill mig-amber" style="width:35%"></div></div><span class="mig-val">847 customers (35%)</span></div>
+        <div class="migration-row"><span class="mig-label">Watch → Critical</span><div class="mig-bar"><div class="mig-fill mig-red" style="width:18%"></div></div><span class="mig-val">412 customers (18%)</span></div>
+        <div class="migration-row"><span class="mig-label">Critical → Default</span><div class="mig-bar"><div class="mig-fill mig-darkred" style="width:6%"></div></div><span class="mig-val">142 customers (6%)</span></div>
+        <div class="migration-row"><span class="mig-label">Watch → Stable ✅</span><div class="mig-bar"><div class="mig-fill mig-green" style="width:42%"></div></div><span class="mig-val">1,024 customers (42%)</span></div>
+        <div class="migration-row"><span class="mig-label">Critical → Watch ✅</span><div class="mig-bar"><div class="mig-fill mig-teal" style="width:28%"></div></div><span class="mig-val">638 customers (28%)</span></div>
+      </div>
+    </div>
+    <!-- ROI Tracker -->
+    <div class="panel">
+      <div class="panel-header"><h3>💰 Intervention ROI</h3></div>
+      <div class="roi-cards">
+        <div class="roi-card"><div class="roi-val roi-green">14.2%</div><div class="roi-label">Uplift (Treated vs Holdout)</div></div>
+        <div class="roi-card"><div class="roi-val roi-blue">₹8.4Cr</div><div class="roi-label">AUM Protected (90d)</div></div>
+        <div class="roi-card"><div class="roi-val roi-purple">72.8%</div><div class="roi-label">Treated Recovery Rate</div></div>
+        <div class="roi-card"><div class="roi-val roi-amber">58.6%</div><div class="roi-label">Holdout Recovery Rate</div></div>
+      </div>
+      <div class="ab-chart">
+        <div class="ab-row"><span>Treated Group</span><div class="ab-bar"><div class="ab-fill ab-treated" style="width:72.8%"></div></div><span>72.8%</span></div>
+        <div class="ab-row"><span>A/B Holdout</span><div class="ab-bar"><div class="ab-fill ab-holdout" style="width:58.6%"></div></div><span>58.6%</span></div>
+      </div>
+    </div>
+    <!-- Channel Efficiency -->
+    <div class="panel">
+      <div class="panel-header"><h3>📱 Channel Efficiency (LinUCB Bandit)</h3></div>
+      <div class="channel-grid">
+        <div class="ch-row"><span class="ch-icon">💬</span><span class="ch-name">WhatsApp</span><div class="ch-bar"><div class="ch-fill" style="width:68%;background:var(--accent-green)"></div></div><span class="ch-val">68% response</span></div>
+        <div class="ch-row"><span class="ch-icon">📱</span><span class="ch-name">SMS</span><div class="ch-bar"><div class="ch-fill" style="width:45%;background:var(--accent-blue)"></div></div><span class="ch-val">45% response</span></div>
+        <div class="ch-row"><span class="ch-icon">📧</span><span class="ch-name">Email</span><div class="ch-bar"><div class="ch-fill" style="width:32%;background:var(--accent-purple)"></div></div><span class="ch-val">32% response</span></div>
+        <div class="ch-row"><span class="ch-icon">📞</span><span class="ch-name">RM Call</span><div class="ch-bar"><div class="ch-fill" style="width:89%;background:var(--accent-amber)"></div></div><span class="ch-val">89% response</span></div>
+        <div class="ch-row"><span class="ch-icon">🔔</span><span class="ch-name">App Push</span><div class="ch-bar"><div class="ch-fill" style="width:28%;background:var(--accent-pink)"></div></div><span class="ch-val">28% response</span></div>
+      </div>
+      <p class="bandit-note">🤖 LinUCB dynamically shifts budget toward WhatsApp for young urban segments, RM Call for HNI.</p>
+    </div>
+    <!-- Drift & Fairness -->
+    <div class="panel exec-wide">
+      <div class="panel-header"><h3>⚖️ Model Drift & Fairness Monitor</h3></div>
+      <div class="compliance-grid">
+        <div class="compliance-card pass"><div class="cc-icon">✅</div><h4>PSI Drift</h4><div class="cc-val">0.08</div><p>Below 0.20 threshold — No retraining needed</p></div>
+        <div class="compliance-card pass"><div class="cc-icon">✅</div><h4>Gender Parity (Fairlearn)</h4><div class="cc-val">0.96</div><p>Demographic parity ratio ≥ 0.80</p></div>
+        <div class="compliance-card pass"><div class="cc-icon">✅</div><h4>Regional Fairness (AIF360)</h4><div class="cc-val">0.93</div><p>Equal opportunity across North/South/East/West</p></div>
+        <div class="compliance-card warn"><div class="cc-icon">⚠️</div><h4>Age Group SPD</h4><div class="cc-val">0.17</div><p>Statistical parity diff slightly elevated for 18-25</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ VIEW 3: RM / COLLECTIONS ═══════════════ -->
+<section id="view-rm" class="view">
+  <div class="rm-layout">
+    <!-- Queue -->
+    <div class="panel rm-queue-panel">
+      <div class="panel-header"><h3>🚨 Urgency-Ranked Queue</h3><span class="queue-badge">12 pending</span></div>
+      <div class="rm-queue" id="rm-queue"></div>
+    </div>
+    <!-- Customer 360 -->
+    <div class="panel rm-detail-panel" id="rm-detail">
+      <div class="panel-header"><h3>👤 Customer 360°</h3></div>
+      <div class="detail-placeholder"><p>Select a customer from the queue →</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ VIEW 4: CUSTOMER APP ═══════════════ -->
+<section id="view-customer" class="view">
+  <div class="customer-layout">
+    <!-- Mobile Simulator -->
+    <div class="mobile-frame">
+      <div class="mobile-notch"></div>
+      <div class="mobile-screen">
+        <div class="mobile-header">
+          <span>🏦 Barclays</span>
+          <span class="mobile-time" id="mobile-time">12:30</span>
+        </div>
+        <div class="mobile-content">
+          <h3 class="mobile-greeting">Hi Sarah 👋</h3>
+          <p class="mobile-sub">Your financial wellness dashboard</p>
+          <!-- Nudge Journey -->
+          <div class="nudge-timeline" id="nudge-timeline">
+            <div class="nudge-item nudge-done">
+              <div class="nudge-dot"></div>
+              <div class="nudge-body"><span class="nudge-day">Day 0</span><span class="nudge-ch">💬 WhatsApp</span><p>"Hi Sarah, we noticed some changes in your spending. We're here to help — reply HELP for options."</p><span class="nudge-status">✅ Delivered • Opened</span></div>
+            </div>
+            <div class="nudge-item nudge-done">
+              <div class="nudge-dot"></div>
+              <div class="nudge-body"><span class="nudge-day">Day 3</span><span class="nudge-ch">🔔 App Push</span><p>"Your personalized financial wellness report is ready."</p><span class="nudge-status">✅ Delivered • Tapped</span></div>
+            </div>
+            <div class="nudge-item nudge-active">
+              <div class="nudge-dot"></div>
+              <div class="nudge-body"><span class="nudge-day">Day 5</span><span class="nudge-ch">📱 SMS</span><p>"Barclays: Good news! You're pre-approved for a 3-month EMI holiday. Tap to accept → barclays.in/emi"</p><span class="nudge-status">📨 Just now</span></div>
+            </div>
+            <div class="nudge-item nudge-pending">
+              <div class="nudge-dot"></div>
+              <div class="nudge-body"><span class="nudge-day">Day 10</span><span class="nudge-ch">📞 RM Call</span><p>Escalation — Relationship Manager callback scheduled</p><span class="nudge-status">🔜 Pending</span></div>
+            </div>
+          </div>
+          <!-- Self-serve actions -->
+          <div class="self-serve">
+            <h4>Quick Actions</h4>
+            <button class="serve-btn serve-primary" onclick="acceptEMI()">✅ Accept EMI Holiday (3 months)</button>
+            <button class="serve-btn" onclick="acceptRestructure()">📋 Restructure EMI (extend 12 months)</button>
+            <button class="serve-btn" onclick="scheduleCall()">📞 Schedule RM Callback</button>
+          </div>
+          <div class="serve-result" id="serve-result"></div>
+        </div>
+      </div>
+      <div class="mobile-homebar"></div>
+    </div>
+    <!-- Info Panel -->
+    <div class="panel customer-info-panel">
+      <div class="panel-header"><h3>📋 Nudge Journey Details</h3></div>
+      <div class="journey-info">
+        <div class="ji-row"><span>Customer</span><span>Sarah Menon (CUST-4821)</span></div>
+        <div class="ji-row"><span>Risk Score</span><span class="ji-critical">0.78 (Critical)</span></div>
+        <div class="ji-row"><span>Journey ID</span><span>NJ-2026-03-28-001</span></div>
+        <div class="ji-row"><span>Journey Start</span><span>March 23, 2026</span></div>
+        <div class="ji-row"><span>Current Step</span><span>3 of 5 (SMS)</span></div>
+        <div class="ji-row"><span>Bandit Channel</span><span>WhatsApp (68% predicted)</span></div>
+        <div class="ji-row"><span>Top SHAP Driver</span><span>atm_withdrawals_7d (+0.18)</span></div>
+        <div class="ji-row"><span>Product Offer</span><span>EMI Holiday (3 months, pre-approved)</span></div>
+        <div class="ji-row"><span>Estimated Savings</span><span>₹42,000 (reduced default risk)</span></div>
+      </div>
+      <div class="journey-note">
+        <p>🤖 <strong>LinUCB Bandit Decision:</strong> WhatsApp selected as Day 0 channel because Sarah's demographic (Female, 28-35, Urban, Tech-savvy) has 68% WhatsApp response rate vs 32% Email.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script src="dashboard.js"></script>
+</body>
+</html>

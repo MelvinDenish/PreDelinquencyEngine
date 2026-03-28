@@ -439,6 +439,99 @@ async def health_check():
     )
 
 
+# ─────────────────────────────────────────────
+# Notification endpoint — triggered by n8n
+# ─────────────────────────────────────────────
+@app.post("/notify")
+async def notify_customer(payload: dict):
+    """
+    Send intervention notification for a customer.
+    Called by n8n workflow after scoring.
+
+    Expects JSON:
+    {
+        "customer_id": "...",
+        "customer_name": "...",
+        "risk_score": 0.72,
+        "risk_tier": "watch",
+        "alert_message": "...",
+        "city": "Delhi",
+        "phone": "+91...",      # optional
+        "email": "..."          # optional
+    }
+    """
+    import os
+    customer_id = payload.get("customer_id", "UNKNOWN")
+    risk_score = float(payload.get("risk_score", 0))
+    alert_message = payload.get("alert_message", "")
+    customer_name = payload.get("customer_name", customer_id)
+    risk_tier = payload.get("risk_tier", "watch")
+
+    # Build customer dict for the dispatcher
+    customer = {
+        "customer_id": customer_id,
+        "first_name": customer_name.split()[0] if customer_name else "",
+        "last_name": " ".join(customer_name.split()[1:]) if customer_name else "",
+        "phone": payload.get("phone", os.getenv("TEST_PHONE_TO", "")),
+        "email": payload.get("email", os.getenv("SMTP_USER", "")),
+        "city": payload.get("city", ""),
+        "monthly_salary": payload.get("salary", 50000),
+    }
+
+    # Build intervention dict
+    intervention = {
+        "risk_score": risk_score,
+        "risk_tier": risk_tier,
+        "intervention_type": "proactive_outreach" if risk_score >= 0.7 else "wellness_checkin",
+        "shap_drivers": payload.get("shap_drivers", []),
+    }
+
+    # Build messages dict
+    messages = {
+        "sms": f"[Barclays PDI] {alert_message}"[:1600],
+        "email_subject": f"Barclays - Risk Alert for {customer_name}",
+        "email_html": f"""
+            <div style='font-family:Arial;padding:20px;'>
+                <h2 style='color:#0a2463;'>⚠️ Pre-Delinquency Alert</h2>
+                <p><strong>Customer:</strong> {customer_name}</p>
+                <p><strong>Risk Score:</strong> {risk_score:.1%}</p>
+                <p><strong>Risk Tier:</strong> {risk_tier.upper()}</p>
+                <hr/>
+                <pre style='background:#f5f5f5;padding:10px;'>{alert_message}</pre>
+                <hr/>
+                <p style='color:#666;font-size:12px;'>
+                    Sent by Barclays Pre-Delinquency Intervention Engine
+                </p>
+            </div>
+        """,
+        "email_text": alert_message,
+        "whatsapp": f"🏦 Barclays PDI Alert\n{alert_message}",
+        "push_title": f"Risk Alert: {customer_name}",
+        "push_body": alert_message,
+        "rm_call_script": f"Contact {customer_name} ({customer_id}). Risk: {risk_score:.1%}. {alert_message}",
+        "collector_brief": f"Escalation for {customer_name}. Risk: {risk_score:.1%}.",
+    }
+
+    try:
+        from intervention.notification_dispatcher import dispatch_notification
+        results = dispatch_notification(customer, intervention, messages)
+        logger.info(f"[Notify] Dispatched {len(results)} notifications for {customer_id}")
+        return {
+            "status": "dispatched",
+            "customer_id": customer_id,
+            "risk_score": risk_score,
+            "channels_attempted": len(results),
+            "results": results,
+        }
+    except Exception as e:
+        logger.error(f"[Notify] Failed for {customer_id}: {e}")
+        return {
+            "status": "error",
+            "customer_id": customer_id,
+            "error": str(e),
+        }
+
+
 @app.post("/score", response_model=ScoreResponse)
 async def score_customer(request: ScoreRequest):
     """Score a single customer using 4-model ensemble + meta-learner stacking."""

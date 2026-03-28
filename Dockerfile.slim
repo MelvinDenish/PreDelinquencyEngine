@@ -14,10 +14,10 @@ RUN pip install --no-cache-dir -r requirements-slim.txt
 # App code
 COPY . .
 
-# Create models dir
+
 RUN mkdir -p /app/models
 
-# Health check
+
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 

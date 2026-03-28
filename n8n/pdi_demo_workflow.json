@@ -26,7 +26,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://host.docker.internal:8000/score",
+        "url": "http://pdi-app:8000/score",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ customer_id: $json.customer_id }) }}",
@@ -63,13 +63,41 @@
     },
     {
       "parameters": {
-        "jsCode": "const txn = $('Generate Transaction').first().json;\nconst score = $('Score Customer').first().json;\n\nconst riskTier = score.risk_score >= 0.7 ? '🔴 CRITICAL' : '🟡 WATCH';\nconst topDriver = score.shap_drivers && score.shap_drivers.length > 0 \n  ? score.shap_drivers[0].feature \n  : 'unknown';\n\nconst message = `${riskTier} | ${txn.customer_name} (${txn.city})\\n` +\n  `Risk Score: ${(score.risk_score * 100).toFixed(1)}%\\n` +\n  `Top Driver: ${topDriver}\\n` +\n  `Last Txn: ${txn.merchant_category} ₹${txn.amount.toLocaleString()}\\n` +\n  `Recommended: ${score.risk_score >= 0.7 ? 'Escalation Call' : 'Wellness Check-in'}`;\n\nreturn [{ json: { \n  alert_message: message,\n  customer_id: txn.customer_id,\n  customer_name: txn.customer_name,\n  risk_score: score.risk_score,\n  risk_tier: score.risk_score >= 0.7 ? 'critical' : 'watch',\n  top_driver: topDriver,\n  city: txn.city,\n  last_category: txn.merchant_category,\n  last_amount: txn.amount\n}}];"
+        "jsCode": "const txn = $('Generate Transaction').first().json;\nconst score = $('Score Customer').first().json;\n\nconst riskTier = score.risk_score >= 0.7 ? '🔴 CRITICAL' : '🟡 WATCH';\nconst topDriver = score.shap_drivers && score.shap_drivers.length > 0 \n  ? score.shap_drivers[0].feature \n  : (score.top_shap_features && score.top_shap_features.length > 0 ? score.top_shap_features[0].feature : 'unknown');\n\nconst message = `${riskTier} | ${txn.customer_name} (${txn.city})\\n` +\n  `Risk Score: ${(score.risk_score * 100).toFixed(1)}%\\n` +\n  `Top Driver: ${topDriver}\\n` +\n  `Last Txn: ${txn.merchant_category} ₹${txn.amount.toLocaleString()}\\n` +\n  `Recommended: ${score.risk_score >= 0.7 ? 'Escalation Call' : 'Wellness Check-in'}`;\n\nreturn [{ json: { \n  alert_message: message,\n  customer_id: txn.customer_id,\n  customer_name: txn.customer_name,\n  risk_score: score.risk_score,\n  risk_tier: score.risk_score >= 0.7 ? 'critical' : 'watch',\n  top_driver: topDriver,\n  city: txn.city,\n  salary: txn.salary,\n  last_category: txn.merchant_category,\n  last_amount: txn.amount,\n  shap_drivers: score.shap_drivers || score.top_shap_features || []\n}}];"
       },
       "id": "format-alert",
       "name": "Format Alert",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [1000, -100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://pdi-app:8000/notify",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ customer_id: $json.customer_id, customer_name: $json.customer_name, risk_score: $json.risk_score, risk_tier: $json.risk_tier, alert_message: $json.alert_message, city: $json.city, salary: $json.salary, shap_drivers: $json.shap_drivers }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "send-notification",
+      "name": "Send Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1300, -100],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const alert = $('Format Alert').first().json;\nconst notifyResult = $('Send Notification').first().json;\n\nreturn [{ json: {\n  status: '📨 NOTIFICATION SENT',\n  customer_name: alert.customer_name,\n  risk_score: alert.risk_score,\n  risk_tier: alert.risk_tier,\n  channels_attempted: notifyResult.channels_attempted || 0,\n  notify_status: notifyResult.status || 'unknown',\n  results: notifyResult.results || [],\n  alert_message: alert.alert_message,\n  timestamp: new Date().toISOString()\n}}];"
+      },
+      "id": "log-notification-result",
+      "name": "Log Notification Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1600, -100]
     },
     {
       "parameters": {
@@ -97,6 +125,12 @@
         [{ "node": "Format Alert", "type": "main", "index": 0 }],
         [{ "node": "Log Stable", "type": "main", "index": 0 }]
       ]
+    },
+    "Format Alert": {
+      "main": [[{ "node": "Send Notification", "type": "main", "index": 0 }]]
+    },
+    "Send Notification": {
+      "main": [[{ "node": "Log Notification Result", "type": "main", "index": 0 }]]
     }
   },
   "settings": {
