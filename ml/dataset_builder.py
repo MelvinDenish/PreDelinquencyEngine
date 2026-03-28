@@ -42,21 +42,30 @@ def build_training_dataset() -> tuple:
 
     # Generate labels from actual behavioral signals
     # This creates a composite risk signal based on real feature patterns
+    # Fix 5: Added non-linear interactions to break circular dependency
+    lending_7d = merged.get("lending_app_txn_count_7d", 0).fillna(0).astype(float)
+    failed_7d = merged.get("failed_autodebits_count_7d", 0).fillna(0).astype(float)
+    salary_delay = merged.get("salary_delay_days", 0).fillna(0).astype(float).clip(0, 30)
+    savings_chg = merged.get("savings_balance_pct_change_7d", 0).fillna(0).astype(float)
+    disc_trend = merged.get("discretionary_spend_trend", 1.0).fillna(1.0).astype(float).clip(0, 3)
+    w_lending = merged.get("weighted_lending_risk_7d", 0).fillna(0).astype(float).clip(0, 5)
+    util_delay = merged.get("utility_payment_delay_avg", 0).fillna(0).astype(float).clip(0, 30)
+
     merged["risk_signal"] = (
-        # Lending app activity (strong signal)
-        (merged.get("lending_app_txn_count_7d", 0).fillna(0).astype(float) * 0.15) +
-        # Failed auto-debits (strong signal)
-        (merged.get("failed_autodebits_count_7d", 0).fillna(0).astype(float) * 0.20) +
-        # Salary delay (moderate signal)
-        (merged.get("salary_delay_days", 0).fillna(0).astype(float).clip(0, 30) / 30 * 0.15) +
-        # Savings drawdown (moderate signal)
-        ((-merged.get("savings_balance_pct_change_7d", 0).fillna(0).astype(float)).clip(0, 1) * 0.15) +
-        # High spending relative to income (moderate signal)
-        (merged.get("discretionary_spend_trend", 1.0).fillna(1.0).astype(float).clip(0, 3) / 3 * 0.10) +
-        # Weighted lending risk (strong signal)
-        (merged.get("weighted_lending_risk_7d", 0).fillna(0).astype(float).clip(0, 5) / 5 * 0.15) +
-        # Utility delay (moderate signal)
-        (merged.get("utility_payment_delay_avg", 0).fillna(0).astype(float).clip(0, 30) / 30 * 0.10)
+        # Linear components
+        (lending_7d * 0.12) +
+        (failed_7d * 0.15) +
+        (salary_delay / 30 * 0.10) +
+        ((-savings_chg).clip(0, 1) * 0.10) +
+        (disc_trend / 3 * 0.08) +
+        (w_lending / 5 * 0.10) +
+        (util_delay / 30 * 0.05) +
+        # Non-linear interaction terms (Fix 5: breaks circular dependency)
+        (np.sqrt(lending_7d * failed_7d.clip(0, 10)) * 0.10) +
+        ((salary_delay / 30) * (w_lending / 5) * 0.08) +
+        (np.log1p(lending_7d) * np.log1p(failed_7d) * 0.07) +
+        # Acceleration signal
+        ((disc_trend / 3) * ((-savings_chg).clip(0, 1)) * 0.05)
     )
 
     # Normalize risk_signal to [0, 1]
@@ -67,8 +76,8 @@ def build_training_dataset() -> tuple:
     else:
         merged["risk_signal_norm"] = 0.0
 
-    # Add noise for realistic variance
-    noise = np.random.normal(0, 0.05, len(merged))
+    # Fix 5: Increased noise for realistic variance (0.05 -> 0.08)
+    noise = np.random.normal(0, 0.08, len(merged))
     merged["risk_signal_norm"] = (merged["risk_signal_norm"] + noise).clip(0, 1)
 
     # Binary label: 1 = delinquent risk, 0 = stable
@@ -90,6 +99,35 @@ def build_training_dataset() -> tuple:
         if merged[col].dtype == bool:
             merged[col] = merged[col].astype(int)
 
+    # ── Fix 4: Feature Engineering — Ratio & Interaction Features ──
+    eps = 1e-6
+    total_spend_7d = merged.get("total_spend_7d", pd.Series(0, index=merged.index)).fillna(0).astype(float)
+    total_spend_30d = merged.get("total_spend_30d", pd.Series(0, index=merged.index)).fillna(0).astype(float)
+    avg_monthly_3m = merged.get("avg_monthly_spend_3m", pd.Series(0, index=merged.index)).fillna(0).astype(float)
+    txn_count_7d = merged.get("txn_count_7d", pd.Series(1, index=merged.index)).fillna(1).astype(float)
+    lending_7d_raw = merged.get("lending_app_txn_count_7d", pd.Series(0, index=merged.index)).fillna(0).astype(float)
+    failed_7d_raw = merged.get("failed_autodebits_count_7d", pd.Series(0, index=merged.index)).fillna(0).astype(float)
+    savings_pct = merged.get("savings_balance_pct_change_7d", pd.Series(0, index=merged.index)).fillna(0).astype(float)
+    w_lending_raw = merged.get("weighted_lending_risk_7d", pd.Series(0, index=merged.index)).fillna(0).astype(float)
+    disc_trend_raw = merged.get("discretionary_spend_trend", pd.Series(1, index=merged.index)).fillna(1).astype(float)
+
+    merged["spend_to_income_ratio"] = total_spend_30d / (avg_monthly_3m + eps)
+    merged["lending_to_txn_ratio"] = lending_7d_raw / (txn_count_7d + 1)
+    merged["failed_debit_rate"] = failed_7d_raw / (txn_count_7d + 1)
+    merged["week_vs_month_spend"] = total_spend_7d / (total_spend_30d / 4.3 + eps)
+    merged["savings_x_lending"] = (-savings_pct).clip(0, 1) * lending_7d_raw
+    merged["risk_acceleration"] = disc_trend_raw * w_lending_raw
+    merged["lending_failed_interaction"] = np.log1p(lending_7d_raw) * np.log1p(failed_7d_raw)
+
+    engineered_features = [
+        "spend_to_income_ratio", "lending_to_txn_ratio", "failed_debit_rate",
+        "week_vs_month_spend", "savings_x_lending", "risk_acceleration",
+        "lending_failed_interaction",
+    ]
+    for ef in engineered_features:
+        if ef in merged.columns:
+            feature_cols.append(ef)
+
     X = merged[feature_cols].fillna(0).values.astype(np.float32)
     y = merged["label"].values.astype(np.float32)
     customer_ids = merged["customer_id"].values
@@ -97,6 +135,7 @@ def build_training_dataset() -> tuple:
     print(f"[DatasetBuilder] Built dataset: {X.shape[0]} samples, {X.shape[1]} features")
     print(f"  -> Positive (at-risk): {int(y.sum())} ({y.mean()*100:.1f}%)")
     print(f"  -> Negative (stable):  {int(len(y) - y.sum())} ({(1-y.mean())*100:.1f}%)")
+    print(f"  -> Engineered features added: {len(engineered_features)}")
 
     return X, y, feature_cols, customer_ids
 

@@ -95,15 +95,23 @@ class DashboardConfig:
 
 
 class ModelConfig:
-    # 4-model ensemble weights (XGBoost + LightGBM + LSTM + TFT)
-    ENSEMBLE_XGB_WEIGHT = float(os.getenv("ENSEMBLE_XGB_WEIGHT", 0.30))
-    ENSEMBLE_LGB_WEIGHT = float(os.getenv("ENSEMBLE_LGB_WEIGHT", 0.20))
-    ENSEMBLE_LSTM_WEIGHT = float(os.getenv("ENSEMBLE_LSTM_WEIGHT", 0.15))
-    ENSEMBLE_TFT_WEIGHT = float(os.getenv("ENSEMBLE_TFT_WEIGHT", 0.35))
+    # 3-model ensemble weights (LSTM dropped — TFT is superior temporal model)
+    # XGBoost: strong tabular learner, LightGBM: fastest + highest AUC, TFT: temporal attention
+    ENSEMBLE_XGB_WEIGHT = float(os.getenv("ENSEMBLE_XGB_WEIGHT", 0.35))
+    ENSEMBLE_LGB_WEIGHT = float(os.getenv("ENSEMBLE_LGB_WEIGHT", 0.40))
+    ENSEMBLE_TFT_WEIGHT = float(os.getenv("ENSEMBLE_TFT_WEIGHT", 0.25))
     USE_META_LEARNER = os.getenv("USE_META_LEARNER", "True").lower() == "true"
-    RISK_CRITICAL_THRESHOLD = float(os.getenv("RISK_CRITICAL_THRESHOLD", 0.7))
-    RISK_WATCH_THRESHOLD = float(os.getenv("RISK_WATCH_THRESHOLD", 0.5))
+    # Optimised thresholds via Youden's J analysis (Fix 7)
+    RISK_CRITICAL_THRESHOLD = float(os.getenv("RISK_CRITICAL_THRESHOLD", 0.65))
+    RISK_WATCH_THRESHOLD = float(os.getenv("RISK_WATCH_THRESHOLD", 0.46))
     COOLDOWN_DAYS = int(os.getenv("COOLDOWN_DAYS", 7))
+
+    # Ensemble weights dict for test compatibility
+    ENSEMBLE_WEIGHTS = {
+        "xgboost": ENSEMBLE_XGB_WEIGHT,
+        "lightgbm": ENSEMBLE_LGB_WEIGHT,
+        "tft": ENSEMBLE_TFT_WEIGHT,
+    }
 
     # Feature list used by models (must be in exact order)
     FEATURE_COLUMNS = [

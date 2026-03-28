@@ -20,7 +20,7 @@ MODEL_DIR = os.path.join(os.path.dirname(__file__), '..', 'models')
 # ─────────────────────────────────────────────
 _xgb_model = None
 _lgb_model = None
-_lstm_model = None
+
 _ensemble = None
 _shap_explainer = None
 _lime_explainer = None
@@ -28,7 +28,7 @@ _lime_explainer = None
 
 def _load_models():
     """Load all models on startup."""
-    global _xgb_model, _lgb_model, _lstm_model, _ensemble, _shap_explainer, _lime_explainer
+    global _xgb_model, _lgb_model, _ensemble, _shap_explainer, _lime_explainer
 
     from ml.ensemble import EnsembleScorer
     _ensemble = EnsembleScorer()
@@ -55,16 +55,7 @@ def _load_models():
     except Exception as e:
         logger.warning(f"[BentoML] LightGBM load failed: {e}")
 
-    # LSTM
-    try:
-        from ml.lstm_model import LSTMDelinquencyModel
-        lstm_path = os.path.join(MODEL_DIR, "lstm_model.pt")
-        if os.path.exists(lstm_path):
-            _lstm_model = LSTMDelinquencyModel()
-            _lstm_model.load(lstm_path)
-            logger.info("[BentoML] LSTM loaded")
-    except Exception as e:
-        logger.warning(f"[BentoML] LSTM load failed: {e}")
+
 
     # SHAP
     if _xgb_model is not None:
@@ -118,9 +109,8 @@ try:
 
             xgb_prob = float(_xgb_model.predict_proba(row)[0]) if _xgb_model else None
             lgb_prob = float(_lgb_model.predict_proba(row)[0]) if _lgb_model else None
-            lstm_prob = None  # LSTM needs sequences
 
-            ensemble_score = _ensemble.combine(xgb_prob, lgb_prob, lstm_prob)
+            ensemble_score = _ensemble.combine(xgb_prob, lgb_prob)
             risk_tier = _ensemble.score_to_risk_tier(ensemble_score)
             credit_score = _ensemble.score_to_credit_score(ensemble_score)
 
@@ -130,9 +120,8 @@ try:
                 "credit_score_mapped": credit_score,
                 "xgboost_score": xgb_prob,
                 "lightgbm_score": lgb_prob,
-                "lstm_score": lstm_prob,
                 "model_contributions": _ensemble.get_model_contributions(
-                    xgb_prob, lgb_prob, lstm_prob
+                    xgb_prob, lgb_prob
                 ),
             })
 
@@ -184,7 +173,7 @@ try:
             "models": {
                 "xgboost": _xgb_model is not None,
                 "lightgbm": _lgb_model is not None,
-                "lstm": _lstm_model is not None,
+                "lstm": False,  # LSTM removed — TFT replaces it
                 "shap": _shap_explainer is not None,
                 "lime": _lime_explainer is not None,
             },

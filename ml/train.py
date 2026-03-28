@@ -5,13 +5,12 @@ Orchestrates the full model training workflow:
 1. Build datasets from PostgreSQL
 2. Train XGBoost on tabular features
 3. Train LightGBM on tabular features
-4. Train LSTM on temporal sequences
-5. Train TFT on temporal sequences
-6. Generate OOF predictions + train meta-learner
-7. Evaluate 4-model stacked ensemble
-8. SHAP + LIME explainability
-9. Fairness audit (Fairlearn + AIF360)
-10. Register models in MLflow
+4. Train TFT on temporal sequences
+5. Generate OOF predictions + train meta-learner
+6. Evaluate 3-model stacked ensemble
+7. SHAP + LIME explainability
+8. Fairness audit (Fairlearn + AIF360)
+9. Register models in MLflow
 """
 import os
 import sys
@@ -28,7 +27,6 @@ from config.settings import ModelConfig, MLflowConfig, PostgresConfig
 from ml.dataset_builder import build_training_dataset, build_temporal_dataset
 from ml.xgboost_model import XGBoostDelinquencyModel
 from ml.lightgbm_model import LightGBMDelinquencyModel
-from ml.lstm_model import LSTMDelinquencyModel
 from ml.ensemble import EnsembleScorer, StackingEnsemble
 from ml.explainability import SHAPExplainer
 from ml.fairness import run_bias_audit
@@ -51,7 +49,7 @@ def train_pipeline():
     """Run the complete training pipeline."""
     print("=" * 70)
     print("Pre-Delinquency Engine - ML Training Pipeline")
-    print("  Models: XGBoost + LightGBM + LSTM + TFT")
+    print("  Models: XGBoost + LightGBM + TFT (3-model ensemble)")
     print("  Stacking: Meta-Learner (OOF LogisticRegression)")
     print("  Explainability: SHAP + LIME")
     print("  Fairness: Fairlearn + AIF360")
@@ -76,10 +74,23 @@ def train_pipeline():
     print(f"  Train: {len(X_train)} samples, Test: {len(X_test)} samples")
 
     # ─────────────────────────────────────────────
-    # Step 2: Train XGBoost
+    # Step 2: Train XGBoost (with Optuna params if available)
     # ─────────────────────────────────────────────
     print("\n[2/8] Training XGBoost model...")
-    xgb_model = XGBoostDelinquencyModel()
+    xgb_best_path = os.path.join(MODEL_DIR, "xgb_best_params.joblib")
+    xgb_params = None
+    if os.path.exists(xgb_best_path):
+        import joblib as jl
+        xgb_params_raw = jl.load(xgb_best_path)
+        xgb_params = {
+            "objective": "binary:logistic",
+            "eval_metric": "auc",
+            "random_state": 42,
+            "n_jobs": -1,
+            **xgb_params_raw,
+        }
+        print("  -> Using Optuna-tuned hyperparameters")
+    xgb_model = XGBoostDelinquencyModel(params=xgb_params)
     xgb_metrics = xgb_model.train(X_train, y_train, feature_names, X_test, y_test)
     xgb_model.save()
     print(f"  -> Train AUC: {xgb_metrics['train_auc']:.4f}")
@@ -96,7 +107,21 @@ def train_pipeline():
     # Step 3: Train LightGBM
     # ─────────────────────────────────────────────
     print("\n[3/8] Training LightGBM model...")
-    lgb_model = LightGBMDelinquencyModel()
+    lgb_best_path = os.path.join(MODEL_DIR, "lgb_best_params.joblib")
+    lgb_params = None
+    if os.path.exists(lgb_best_path):
+        import joblib as jl
+        lgb_params_raw = jl.load(lgb_best_path)
+        lgb_params = {
+            "objective": "binary",
+            "metric": "auc",
+            "verbose": -1,
+            "n_jobs": -1,
+            "seed": 42,
+            **lgb_params_raw,
+        }
+        print("  -> Using Optuna-tuned hyperparameters")
+    lgb_model = LightGBMDelinquencyModel(params=lgb_params)
     lgb_metrics = lgb_model.train(X_train, y_train, feature_names, X_test, y_test)
     lgb_model.save()
     print(f"  -> Train AUC: {lgb_metrics['train_auc']:.4f}")
@@ -117,7 +142,7 @@ def train_pipeline():
         )
         lstm_model = LSTMDelinquencyModel(
             input_size=X_seq.shape[2], hidden_size=64, num_layers=2,
-            epochs=30, batch_size=64,
+            epochs=50, batch_size=64,  # Fix 6: increased epochs for BiLSTM
         )
         lstm_metrics = lstm_model.train(
             X_seq[seq_train_idx], y_seq[seq_train_idx],
@@ -177,23 +202,14 @@ def train_pipeline():
         print("\n[5/10] Skipping TFT (insufficient temporal data)")
 
     # ─────────────────────────────────────────────
-    # Step 6: Meta-Learner Stacking (OOF)
+    # Step 5: Meta-Learner Stacking (OOF)
     # ─────────────────────────────────────────────
-    print("\n[6/10] Training Meta-Learner Stacking Ensemble...")
+    print("\n[5/12] Training Meta-Learner Stacking Ensemble...")
     stacker = StackingEnsemble()
 
     # For meta-learner, use test set predictions as proxy for OOF
     xgb_test_probs = xgb_model.predict_proba(X_test)
     lgb_test_probs = lgb_model.predict_proba(X_test)
-
-    lstm_test_probs = None
-    if lstm_model is not None and X_seq is not None:
-        test_customer_ids = customer_ids[idx_test]
-        lstm_test_probs = np.zeros(len(X_test))
-        for i, cid in enumerate(test_customer_ids):
-            seq_idx = np.where(cids_seq == cid)[0]
-            if len(seq_idx) > 0:
-                lstm_test_probs[i] = lstm_model.predict_proba(X_seq[seq_idx[0]:seq_idx[0]+1])[0]
 
     tft_test_probs = None
     if tft_model is not None and X_seq is not None:
@@ -224,7 +240,6 @@ def train_pipeline():
             xgb_probs=xgb_test_probs,
             lgb_probs=lgb_test_probs,
             tft_probs=tft_test_probs if tft_test_probs is not None else np.full(len(X_test), 0.5),
-            lstm_probs=lstm_test_probs if lstm_test_probs is not None else np.full(len(X_test), 0.5),
             income_brackets=meta_info["income_bracket"].tolist() if len(meta_info) >= len(X_test) else None,
             tenure_months_arr=meta_info["tenure_months"].values if len(meta_info) >= len(X_test) else None,
             credit_scores=meta_info["credit_score"].values if len(meta_info) >= len(X_test) else None,
@@ -239,14 +254,14 @@ def train_pipeline():
         meta_metrics = {}
 
     # ─────────────────────────────────────────────
-    # Step 7: Evaluate 4-Model Stacked Ensemble
+    # Step 6: Evaluate 3-Model Stacked Ensemble
     # ─────────────────────────────────────────────
-    print("\n[7/10] Evaluating 4-model stacked ensemble...")
+    print("\n[6/12] Evaluating 3-model stacked ensemble...")
     ensemble = EnsembleScorer()
 
     # Fixed-weight ensemble
     ensemble_probs = ensemble.combine_batch(xgb_test_probs, lgb_test_probs,
-                                            lstm_test_probs, tft_test_probs)
+                                            tft_probs=tft_test_probs)
     ensemble_auc = roc_auc_score(y_test, ensemble_probs)
     print(f"  -> Fixed-weight Ensemble AUC: {ensemble_auc:.4f}")
 
@@ -258,12 +273,10 @@ def train_pipeline():
                 xgb_prob=xgb_test_probs[i],
                 lgb_prob=lgb_test_probs[i],
                 tft_prob=tft_test_probs[i] if tft_test_probs is not None else None,
-                lstm_prob=lstm_test_probs[i] if lstm_test_probs is not None else None,
             ) for i in range(len(X_test))
         ])
         stacked_auc = roc_auc_score(y_test, stacked_probs)
         print(f"  -> Stacked (Meta-Learner) AUC: {stacked_auc:.4f}")
-        # Use stacked probs for tier distribution
         ensemble_probs = stacked_probs
         ensemble_auc = stacked_auc
 
@@ -417,8 +430,6 @@ def train_pipeline():
     print("=" * 70)
     print(f"  XGBoost AUC:  {xgb_metrics['train_auc']:.4f} (CV: {xgb_metrics['cv_auc_mean']:.4f})")
     print(f"  LightGBM AUC: {lgb_metrics['train_auc']:.4f} (CV: {lgb_metrics['cv_auc_mean']:.4f})")
-    if lstm_metrics:
-        print(f"  LSTM AUC:     {lstm_metrics.get('train_auc', 'N/A')}")
     if tft_metrics:
         print(f"  TFT AUC:      {tft_metrics.get('best_val_auc', 'N/A')}")
     print(f"  Ensemble AUC: {ensemble_auc:.4f}")
@@ -440,7 +451,6 @@ def train_pipeline():
     return {
         "xgboost_metrics": xgb_metrics,
         "lightgbm_metrics": lgb_metrics,
-        "lstm_metrics": lstm_metrics,
         "tft_metrics": tft_metrics,
         "meta_learner_metrics": meta_metrics,
         "ensemble_auc": ensemble_auc,

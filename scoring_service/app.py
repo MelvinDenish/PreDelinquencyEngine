@@ -2,7 +2,7 @@
 """
 FastAPI Scoring Service — v3.0
 Provides REST endpoints for real-time delinquency risk scoring.
-Integrates XGBoost + LightGBM + LSTM + TFT ensemble with meta-learner stacking,
+Integrates XGBoost + LightGBM + TFT ensemble with meta-learner stacking,
 cold-start handling, segment classification, product action proposals,
 SHAP + LIME explainability, Cassandra storage, and Prometheus metrics.
 """
@@ -30,7 +30,7 @@ from config.settings import (
 )
 from ml.xgboost_model import XGBoostDelinquencyModel
 from ml.lightgbm_model import LightGBMDelinquencyModel
-from ml.lstm_model import LSTMDelinquencyModel
+
 from ml.ensemble import EnsembleScorer, StackingEnsemble
 from ml.explainability import SHAPExplainer
 from ml.tft_model import TFTDelinquencyModel
@@ -57,7 +57,7 @@ logging.basicConfig(level=logging.INFO)
 # ─────────────────────────────────────────────
 app = FastAPI(
     title="Pre-Delinquency Intervention Engine - Scoring Service",
-    description="Real-time risk scoring: XGBoost + LightGBM + LSTM + TFT ensemble "
+    description="Real-time risk scoring: XGBoost + LightGBM + TFT ensemble "
                 "with meta-learner stacking, cold-start handling, segment classification, "
                 "SHAP + LIME explainability, Prometheus metrics, Cassandra storage",
     version="3.0.0",
@@ -93,7 +93,7 @@ except ImportError:
 # ─────────────────────────────────────────────
 xgb_model: Optional[XGBoostDelinquencyModel] = None
 lgb_model: Optional[LightGBMDelinquencyModel] = None
-lstm_model: Optional[LSTMDelinquencyModel] = None
+
 tft_model: Optional[TFTDelinquencyModel] = None
 ensemble: Optional[EnsembleScorer] = None
 stacker: Optional[StackingEnsemble] = None
@@ -132,7 +132,7 @@ class ScoreResponse(BaseModel):
     is_cold_start: bool = False
     xgboost_score: float
     lightgbm_score: Optional[float] = None
-    lstm_score: Optional[float] = None
+
     tft_score: Optional[float] = None
     ensemble_score: float
     meta_learner_used: bool = False
@@ -251,12 +251,12 @@ def store_risk_score(score_data: dict):
     cursor.execute(
         """INSERT INTO risk_scores
         (customer_id, risk_score, risk_tier, credit_score_mapped,
-         xgboost_score, lstm_score, ensemble_score, top_shap_features, model_version)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+         xgboost_score, ensemble_score, top_shap_features, model_version)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
         (
             customer_id, score_data["risk_score"], score_data["risk_tier"],
             score_data["credit_score_mapped"], score_data.get("xgboost_score"),
-            score_data.get("lstm_score"), score_data["ensemble_score"],
+            score_data["ensemble_score"],
             json.dumps(score_data.get("top_shap_features", [])),
             "v2.0",
         )
@@ -272,7 +272,7 @@ def store_risk_score(score_data: dict):
 @app.on_event("startup")
 async def load_models():
     """Load all models on startup."""
-    global xgb_model, lgb_model, lstm_model, tft_model, ensemble, stacker
+    global xgb_model, lgb_model, tft_model, ensemble, stacker
     global shap_explainer, lime_explainer, redis_client, sequence_cache
     global survival_model, conformal_predictor, uplift_model
 
@@ -306,15 +306,7 @@ async def load_models():
     except Exception as e:
         logger.warning(f"LightGBM load failed: {e}")
 
-    # Load LSTM
-    try:
-        lstm_path = os.path.join(MODEL_DIR, "lstm_model.pt")
-        if os.path.exists(lstm_path):
-            lstm_model = LSTMDelinquencyModel()
-            lstm_model.load(lstm_path)
-            logger.info("LSTM model loaded")
-    except Exception as e:
-        logger.warning(f"LSTM load failed: {e}")
+
 
     # Load TFT
     try:
@@ -412,7 +404,7 @@ async def load_models():
     logger.info(
         f"Scoring service v4.0 ready "
         f"(XGB:{xgb_model is not None} LGB:{lgb_model is not None} "
-        f"LSTM:{lstm_model is not None} TFT:{tft_model is not None} "
+        f"TFT:{tft_model is not None} "
         f"MetaLearner:{stacker.meta_learner is not None} "
         f"Survival:{survival_model is not None} "
         f"Conformal:{conformal_predictor is not None} "
@@ -429,7 +421,7 @@ async def health_check():
         models_loaded={
             "xgboost": xgb_model is not None,
             "lightgbm": lgb_model is not None,
-            "lstm": lstm_model is not None,
+
             "tft": tft_model is not None,
             "meta_learner": stacker.meta_learner is not None if stacker else False,
             "shap": shap_explainer is not None,
@@ -578,8 +570,7 @@ async def score_customer(request: ScoreRequest):
             except Exception as e:
                 logger.warning(f"TFT inference failed: {e}")
 
-    # Step 5: LSTM inference (skip for single-score without sequences)
-    lstm_prob = None
+
 
     # Step 6: Ensemble scoring (meta-learner or fixed weights)
     meta_learner_used = False
@@ -594,12 +585,12 @@ async def score_customer(request: ScoreRequest):
         }
         final_score = stacker.combine_stacked(
             xgb_prob=xgb_prob, lgb_prob=lgb_prob,
-            tft_prob=tft_prob, lstm_prob=lstm_prob,
+            tft_prob=tft_prob,
             customer_meta=customer_meta,
         )
         meta_learner_used = True
     else:
-        final_score = ensemble.combine(xgb_prob, lgb_prob, lstm_prob, tft_prob)
+        final_score = ensemble.combine(xgb_prob, lgb_prob, tft_prob)
 
     # Step 6b: Cold-start scoring cap
     if is_cold_start:
@@ -715,7 +706,7 @@ async def score_customer(request: ScoreRequest):
         "credit_score_mapped": credit_score,
         "xgboost_score": xgb_prob,
         "lightgbm_score": lgb_prob,
-        "lstm_score": lstm_prob,
+
         "tft_score": tft_prob,
         "ensemble_score": final_score,
         "segment_type": segment_type,
@@ -748,7 +739,7 @@ async def score_customer(request: ScoreRequest):
             credit_score=credit_score,
             xgboost_score=xgb_prob,
             lightgbm_score=lgb_prob,
-            lstm_score=lstm_prob,
+
             ensemble_score=final_score,
             top_features=json.dumps(top_shap) if top_shap else None,
         )
@@ -784,7 +775,7 @@ async def score_customer(request: ScoreRequest):
         is_cold_start=is_cold_start,
         xgboost_score=xgb_prob or 0.0,
         lightgbm_score=lgb_prob,
-        lstm_score=lstm_prob,
+
         tft_score=tft_prob,
         ensemble_score=final_score,
         meta_learner_used=meta_learner_used,
@@ -849,7 +840,7 @@ async def get_score(customer_id: str):
         "risk_tier": row[1],
         "credit_score_mapped": row[2],
         "xgboost_score": float(row[3]) if row[3] else None,
-        "lstm_score": float(row[4]) if row[4] else None,
+
         "ensemble_score": float(row[5]) if row[5] else None,
         "top_shap_features": row[6],
         "scored_at": row[7].isoformat() if row[7] else None,

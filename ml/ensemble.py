@@ -1,7 +1,8 @@
 # pyre-ignore-all-errors
 """
 Ensemble Scorer — StackingEnsemble + Fixed-Weight Fallback
-Combines XGBoost, LightGBM, LSTM, and TFT predictions.
+Combines XGBoost, LightGBM, and TFT predictions (3-model ensemble).
+LSTM removed — TFT (Temporal Fusion Transformer) is the superior temporal model.
 Supports meta-learner stacking (LogisticRegression) with OOF training
 or fixed-weight fallback if meta-learner is unavailable.
 """
@@ -19,22 +20,21 @@ logger = logging.getLogger(__name__)
 
 
 class EnsembleScorer:
-    """4-model ensemble: XGBoost + LightGBM + LSTM + TFT (fixed weights)."""
+    """3-model ensemble: XGBoost + LightGBM + TFT (fixed weights)."""
 
     def __init__(self, xgb_weight: float = None, lgb_weight: float = None,
-                 lstm_weight: float = None, tft_weight: float = None):
+                 tft_weight: float = None):
         """
         Initialize ensemble with configurable weights.
-        Default: XGBoost 0.30, LightGBM 0.20, LSTM 0.15, TFT 0.35
+        Default: XGBoost 0.35, LightGBM 0.40, TFT 0.25
         Falls back to fewer models if components are missing.
         """
         self.xgb_weight = xgb_weight or ModelConfig.ENSEMBLE_XGB_WEIGHT
-        self.lgb_weight = lgb_weight or getattr(ModelConfig, 'ENSEMBLE_LGB_WEIGHT', 0.20)
-        self.lstm_weight = lstm_weight or ModelConfig.ENSEMBLE_LSTM_WEIGHT
-        self.tft_weight = tft_weight or getattr(ModelConfig, 'ENSEMBLE_TFT_WEIGHT', 0.35)
+        self.lgb_weight = lgb_weight or getattr(ModelConfig, 'ENSEMBLE_LGB_WEIGHT', 0.40)
+        self.tft_weight = tft_weight or getattr(ModelConfig, 'ENSEMBLE_TFT_WEIGHT', 0.25)
 
     def combine(self, xgb_prob: float = None, lgb_prob: float = None,
-                lstm_prob: float = None, tft_prob: float = None) -> float:
+                tft_prob: float = None, **kwargs) -> float:
         """
         Combine model predictions using weighted average.
         Handles missing models by redistributing weights.
@@ -49,10 +49,6 @@ class EnsembleScorer:
         if lgb_prob is not None:
             scores.append(lgb_prob)
             weights.append(self.lgb_weight)
-
-        if lstm_prob is not None:
-            scores.append(lstm_prob)
-            weights.append(self.lstm_weight)
 
         if tft_prob is not None:
             scores.append(tft_prob)
@@ -70,8 +66,7 @@ class EnsembleScorer:
 
     def combine_batch(self, xgb_probs: np.ndarray = None,
                       lgb_probs: np.ndarray = None,
-                      lstm_probs: np.ndarray = None,
-                      tft_probs: np.ndarray = None) -> np.ndarray:
+                      tft_probs: np.ndarray = None, **kwargs) -> np.ndarray:
         """Combine batch predictions."""
         available = []
         weights = []
@@ -83,10 +78,6 @@ class EnsembleScorer:
         if lgb_probs is not None:
             available.append(lgb_probs)
             weights.append(self.lgb_weight)
-
-        if lstm_probs is not None:
-            available.append(lstm_probs)
-            weights.append(self.lstm_weight)
 
         if tft_probs is not None:
             available.append(tft_probs)
@@ -122,10 +113,9 @@ class EnsembleScorer:
 
     def get_model_contributions(self, xgb_prob: float = None,
                                  lgb_prob: float = None,
-                                 lstm_prob: float = None,
-                                 tft_prob: float = None) -> dict:
+                                 tft_prob: float = None, **kwargs) -> dict:
         """Return individual model contributions to the ensemble."""
-        ensemble = self.combine(xgb_prob, lgb_prob, lstm_prob, tft_prob)
+        ensemble = self.combine(xgb_prob, lgb_prob, tft_prob)
         contributions = {}
 
         if xgb_prob is not None:
@@ -139,12 +129,6 @@ class EnsembleScorer:
                 "raw_score": float(lgb_prob),
                 "weight": self.lgb_weight,
                 "contribution": float(lgb_prob * self.lgb_weight),
-            }
-        if lstm_prob is not None:
-            contributions["lstm"] = {
-                "raw_score": float(lstm_prob),
-                "weight": self.lstm_weight,
-                "contribution": float(lstm_prob * self.lstm_weight),
             }
         if tft_prob is not None:
             contributions["tft"] = {
@@ -166,10 +150,10 @@ class StackingEnsemble:
     """
     Meta-learner stacking ensemble (M4).
     Trains a LogisticRegression on out-of-fold predictions from
-    XGBoost, LightGBM, LSTM, TFT plus customer meta-features.
+    XGBoost, LightGBM, TFT plus customer meta-features.
 
-    Meta-feature vector (8 inputs):
-        [xgb_score, lgb_score, tft_score, lstm_score,
+    Meta-feature vector (7 inputs):
+        [xgb_score, lgb_score, tft_score,
          income_bracket_encoded, segment_type_encoded,
          tenure_months_normalised, credit_score_normalised]
     """
@@ -191,17 +175,16 @@ class StackingEnsemble:
             self.load_meta_learner(meta_learner_path)
 
     def build_meta_features(self, xgb_prob: float = None, lgb_prob: float = None,
-                             tft_prob: float = None, lstm_prob: float = None,
+                             tft_prob: float = None,
                              income_bracket: str = "middle",
                              segment_type: str = "salaried",
                              tenure_months: int = 36,
-                             credit_score: int = 700) -> np.ndarray:
-        """Construct the 8-feature meta-input vector."""
+                             credit_score: int = 700, **kwargs) -> np.ndarray:
+        """Construct the 7-feature meta-input vector."""
         return np.array([
             xgb_prob if xgb_prob is not None else 0.5,
             lgb_prob if lgb_prob is not None else 0.5,
             tft_prob if tft_prob is not None else 0.5,
-            lstm_prob if lstm_prob is not None else 0.5,
             self.INCOME_BRACKET_MAP.get(income_bracket, 3) / 6.0,   # Normalised
             self.SEGMENT_TYPE_MAP.get(segment_type, 0) / 6.0,       # Normalised
             min(tenure_months, 300) / 300.0,                         # Cap at 25yr
@@ -211,39 +194,37 @@ class StackingEnsemble:
     def build_meta_features_batch(self, xgb_probs: np.ndarray = None,
                                     lgb_probs: np.ndarray = None,
                                     tft_probs: np.ndarray = None,
-                                    lstm_probs: np.ndarray = None,
                                     income_brackets: list = None,
                                     segment_types: list = None,
                                     tenure_months_arr: np.ndarray = None,
-                                    credit_scores: np.ndarray = None) -> np.ndarray:
+                                    credit_scores: np.ndarray = None, **kwargs) -> np.ndarray:
         """Build meta-features for a batch of customers."""
         n = len(xgb_probs) if xgb_probs is not None else len(lgb_probs)
-        meta_X = np.zeros((n, 8), dtype=np.float64)
+        meta_X = np.zeros((n, 7), dtype=np.float64)
 
         meta_X[:, 0] = xgb_probs if xgb_probs is not None else 0.5
         meta_X[:, 1] = lgb_probs if lgb_probs is not None else 0.5
         meta_X[:, 2] = tft_probs if tft_probs is not None else 0.5
-        meta_X[:, 3] = lstm_probs if lstm_probs is not None else 0.5
 
         if income_brackets:
-            meta_X[:, 4] = [self.INCOME_BRACKET_MAP.get(b, 3) / 6.0 for b in income_brackets]
+            meta_X[:, 3] = [self.INCOME_BRACKET_MAP.get(b, 3) / 6.0 for b in income_brackets]
         else:
-            meta_X[:, 4] = 0.5
+            meta_X[:, 3] = 0.5
 
         if segment_types:
-            meta_X[:, 5] = [self.SEGMENT_TYPE_MAP.get(s, 0) / 6.0 for s in segment_types]
+            meta_X[:, 4] = [self.SEGMENT_TYPE_MAP.get(s, 0) / 6.0 for s in segment_types]
         else:
-            meta_X[:, 5] = 0.0
+            meta_X[:, 4] = 0.0
 
         if tenure_months_arr is not None:
-            meta_X[:, 6] = np.clip(tenure_months_arr, 0, 300) / 300.0
+            meta_X[:, 5] = np.clip(tenure_months_arr, 0, 300) / 300.0
         else:
-            meta_X[:, 6] = 0.5
+            meta_X[:, 5] = 0.5
 
         if credit_scores is not None:
-            meta_X[:, 7] = np.clip(credit_scores - 300, 0, 600) / 600.0
+            meta_X[:, 6] = np.clip(credit_scores - 300, 0, 600) / 600.0
         else:
-            meta_X[:, 7] = 0.5
+            meta_X[:, 6] = 0.5
 
         return meta_X
 
@@ -285,7 +266,7 @@ class StackingEnsemble:
             "cv_auc_std": float(np.std(cv_scores)),
             "train_auc": float(train_auc),
             "coefficients": dict(zip(
-                ["xgb", "lgb", "tft", "lstm", "income", "segment", "tenure", "credit"],
+                ["xgb", "lgb", "tft", "income", "segment", "tenure", "credit"],
                 self.meta_learner.coef_[0].tolist()
             )),
         }
@@ -297,8 +278,8 @@ class StackingEnsemble:
         return metrics
 
     def combine_stacked(self, xgb_prob: float = None, lgb_prob: float = None,
-                         tft_prob: float = None, lstm_prob: float = None,
-                         customer_meta: dict = None) -> float:
+                         tft_prob: float = None,
+                         customer_meta: dict = None, **kwargs) -> float:
         """
         Use meta-learner if available, else fallback to fixed weights.
 
@@ -306,12 +287,12 @@ class StackingEnsemble:
             customer_meta: dict with income_bracket, segment_type, tenure_months, credit_score
         """
         if self.meta_learner is None:
-            return self.fallback_ensemble.combine(xgb_prob, lgb_prob, lstm_prob, tft_prob)
+            return self.fallback_ensemble.combine(xgb_prob, lgb_prob, tft_prob)
 
         meta = customer_meta or {}
         meta_features = self.build_meta_features(
             xgb_prob=xgb_prob, lgb_prob=lgb_prob,
-            tft_prob=tft_prob, lstm_prob=lstm_prob,
+            tft_prob=tft_prob,
             income_bracket=meta.get("income_bracket", "middle"),
             segment_type=meta.get("segment_type", "salaried"),
             tenure_months=meta.get("tenure_months", 36),

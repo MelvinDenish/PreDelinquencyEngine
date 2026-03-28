@@ -68,7 +68,7 @@ def _ensure_schema(session):
             credit_score    INT,
             xgboost_score   DOUBLE,
             lightgbm_score  DOUBLE,
-            lstm_score      DOUBLE,
+
             ensemble_score  DOUBLE,
             top_features    TEXT,
             model_version   TEXT,
@@ -113,7 +113,7 @@ def write_risk_score(
     credit_score: int,
     xgboost_score: Optional[float] = None,
     lightgbm_score: Optional[float] = None,
-    lstm_score: Optional[float] = None,
+
     ensemble_score: Optional[float] = None,
     top_features: Optional[str] = None,
     model_version: str = "v2.0",
@@ -136,14 +136,14 @@ def write_risk_score(
             f"""
             INSERT INTO {CASSANDRA_KEYSPACE}.risk_scores
               (customer_id, scored_at, score_id, risk_score, risk_tier, credit_score,
-               xgboost_score, lightgbm_score, lstm_score, ensemble_score,
+               xgboost_score, lightgbm_score, ensemble_score,
                top_features, model_version)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 customer_id, scored_at, score_id,
                 risk_score, risk_tier, credit_score,
-                xgboost_score, lightgbm_score, lstm_score,
+                xgboost_score, lightgbm_score,
                 ensemble_score or risk_score,
                 json.dumps(top_features) if top_features and not isinstance(top_features, str) else top_features,
                 model_version,

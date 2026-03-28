@@ -1,0 +1,613 @@
+{
+  "timestamp": "2026-03-28T13:16:13.937154",
+  "models": {
+    "xgboost": {
+      "model_name": "XGBoost",
+      "auc_roc": 0.7821,
+      "gini_coefficient": 0.5642,
+      "ks_statistic": 0.5318,
+      "average_precision_auc_pr": 0.7276,
+      "brier_score": 0.1166,
+      "log_loss": 0.4387,
+      "mcc_at_0.5": 0.6353,
+      "at_threshold_0.5": {
+        "threshold": 0.5,
+        "precision": 0.899,
+        "recall": 0.5477,
+        "f1": 0.6807,
+        "accuracy": 0.8715,
+        "specificity": 0.9795,
+        "tp": 356,
+        "fp": 40,
+        "tn": 1910,
+        "fn": 294
+      },
+      "optimal_thresholds": {
+        "youden_j_threshold": 0.6339,
+        "youden_j_value": 0.5318,
+        "sensitivity_at_j": 0.5446,
+        "specificity_at_j": 0.9872,
+        "f1_optimal_threshold": 0.6339,
+        "f1_at_optimal": 0.688
+      },
+      "at_youden_threshold": {
+        "threshold": 0.6339,
+        "precision": 0.934,
+        "recall": 0.5446,
+        "f1": 0.688,
+        "accuracy": 0.8765,
+        "specificity": 0.9872,
+        "tp": 354,
+        "fp": 25,
+        "tn": 1925,
+        "fn": 296
+      },
+      "at_f1_optimal_threshold": {
+        "threshold": 0.6339,
+        "precision": 0.934,
+        "recall": 0.5446,
+        "f1": 0.688,
+        "accuracy": 0.8765,
+        "specificity": 0.9872,
+        "tp": 354,
+        "fp": 25,
+        "tn": 1925,
+        "fn": 296
+      },
+      "decile_analysis": [
+        {
+          "decile": 1,
+          "count": 260,
+          "positives": 260,
+          "event_rate": 1.0,
+          "cumulative_capture": 0.4000000059604645,
+          "cumulative_lift": 4.0
+        },
+        {
+          "decile": 2,
+          "count": 260,
+          "positives": 111,
+          "event_rate": 0.4269,
+          "cumulative_capture": 0.5708000063896179,
+          "cumulative_lift": 2.8538
+        },
+        {
+          "decile": 3,
+          "count": 260,
+          "positives": 39,
+          "event_rate": 0.15,
+          "cumulative_capture": 0.6308000087738037,
+          "cumulative_lift": 2.1026
+        },
+        {
+          "decile": 4,
+          "count": 260,
+          "positives": 42,
+          "event_rate": 0.1615,
+          "cumulative_capture": 0.6953999996185303,
+          "cumulative_lift": 1.7385
+        },
+        {
+          "decile": 5,
+          "count": 260,
+          "positives": 41,
+          "event_rate": 0.1577,
+          "cumulative_capture": 0.7584999799728394,
+          "cumulative_lift": 1.5169
+        },
+        {
+          "decile": 6,
+          "count": 260,
+          "positives": 31,
+          "event_rate": 0.1192,
+          "cumulative_capture": 0.8062000274658203,
+          "cumulative_lift": 1.3436
+        },
+        {
+          "decile": 7,
+          "count": 260,
+          "positives": 31,
+          "event_rate": 0.1192,
+          "cumulative_capture": 0.8537999987602234,
+          "cumulative_lift": 1.2198
+        },
+        {
+          "decile": 8,
+          "count": 260,
+          "positives": 38,
+          "event_rate": 0.1462,
+          "cumulative_capture": 0.9122999906539917,
+          "cumulative_lift": 1.1404
+        },
+        {
+          "decile": 9,
+          "count": 260,
+          "positives": 23,
+          "event_rate": 0.0885,
+          "cumulative_capture": 0.947700023651123,
+          "cumulative_lift": 1.053
+        },
+        {
+          "decile": 10,
+          "count": 260,
+          "positives": 34,
+          "event_rate": 0.1308,
+          "cumulative_capture": 1.0,
+          "cumulative_lift": 1.0
+        }
+      ]
+    },
+    "lightgbm": {
+      "model_name": "LightGBM",
+      "auc_roc": 0.8004,
+      "gini_coefficient": 0.6008,
+      "ks_statistic": 0.5344,
+      "average_precision_auc_pr": 0.7404,
+      "brier_score": 0.1298,
+      "log_loss": 0.4308,
+      "mcc_at_0.5": 0.6558,
+      "at_threshold_0.5": {
+        "threshold": 0.5,
+        "precision": 0.9461,
+        "recall": 0.54,
+        "f1": 0.6876,
+        "accuracy": 0.8773,
+        "specificity": 0.9897,
+        "tp": 351,
+        "fp": 20,
+        "tn": 1930,
+        "fn": 299
+      },
+      "optimal_thresholds": {
+        "youden_j_threshold": 0.4597,
+        "youden_j_value": 0.5344,
+        "sensitivity_at_j": 0.5446,
+        "specificity_at_j": 0.9897,
+        "f1_optimal_threshold": 0.4597,
+        "f1_at_optimal": 0.6914
+      },
+      "at_youden_threshold": {
+        "threshold": 0.4597,
+        "precision": 0.9465,
+        "recall": 0.5446,
+        "f1": 0.6914,
+        "accuracy": 0.8785,
+        "specificity": 0.9897,
+        "tp": 354,
+        "fp": 20,
+        "tn": 1930,
+        "fn": 296
+      },
+      "at_f1_optimal_threshold": {
+        "threshold": 0.4597,
+        "precision": 0.9465,
+        "recall": 0.5446,
+        "f1": 0.6914,
+        "accuracy": 0.8785,
+        "specificity": 0.9897,
+        "tp": 354,
+        "fp": 20,
+        "tn": 1930,
+        "fn": 296
+      },
+      "decile_analysis": [
+        {
+          "decile": 1,
+          "count": 255,
+          "positives": 255,
+          "event_rate": 1.0,
+          "cumulative_capture": 0.392300009727478,
+          "cumulative_lift": 3.9231
+        },
+        {
+          "decile": 2,
+          "count": 265,
+          "positives": 128,
+          "event_rate": 0.483,
+          "cumulative_capture": 0.5892000198364258,
+          "cumulative_lift": 2.9462
+        },
+        {
+          "decile": 3,
+          "count": 260,
+          "positives": 38,
+          "event_rate": 0.1462,
+          "cumulative_capture": 0.6477000117301941,
+          "cumulative_lift": 2.159
+        },
+        {
+          "decile": 4,
+          "count": 260,
+          "positives": 39,
+          "event_rate": 0.15,
+          "cumulative_capture": 0.7077000141143799,
+          "cumulative_lift": 1.7692
+        },
+        {
+          "decile": 5,
+          "count": 260,
+          "positives": 36,
+          "event_rate": 0.1385,
+          "cumulative_capture": 0.7631000280380249,
+          "cumulative_lift": 1.5262
+        },
+        {
+          "decile": 6,
+          "count": 259,
+          "positives": 37,
+          "event_rate": 0.1429,
+          "cumulative_capture": 0.8199999928474426,
+          "cumulative_lift": 1.3667
+        },
+        {
+          "decile": 7,
+          "count": 260,
+          "positives": 41,
+          "event_rate": 0.1577,
+          "cumulative_capture": 0.8830999732017517,
+          "cumulative_lift": 1.2615
+        },
+        {
+          "decile": 8,
+          "count": 261,
+          "positives": 35,
+          "event_rate": 0.1341,
+          "cumulative_capture": 0.9369000196456909,
+          "cumulative_lift": 1.1712
+        },
+        {
+          "decile": 9,
+          "count": 260,
+          "positives": 21,
+          "event_rate": 0.0808,
+          "cumulative_capture": 0.9692000150680542,
+          "cumulative_lift": 1.0769
+        },
+        {
+          "decile": 10,
+          "count": 260,
+          "positives": 20,
+          "event_rate": 0.0769,
+          "cumulative_capture": 1.0,
+          "cumulative_lift": 1.0
+        }
+      ]
+    },
+    "lstm": {
+      "model_name": "LSTM",
+      "auc_roc": 0.7604,
+      "gini_coefficient": 0.5207,
+      "ks_statistic": 0.4995,
+      "average_precision_auc_pr": 0.6064,
+      "brier_score": 0.2056,
+      "log_loss": 0.6878,
+      "mcc_at_0.5": 0.3553,
+      "at_threshold_0.5": {
+        "threshold": 0.5,
+        "precision": 0.446,
+        "recall": 0.68,
+        "f1": 0.5387,
+        "accuracy": 0.7088,
+        "specificity": 0.7185,
+        "tp": 442,
+        "fp": 549,
+        "tn": 1401,
+        "fn": 208
+      },
+      "optimal_thresholds": {
+        "youden_j_threshold": 0.7824,
+        "youden_j_value": 0.4995,
+        "sensitivity_at_j": 0.5738,
+        "specificity_at_j": 0.9256,
+        "f1_optimal_threshold": 0.7824,
+        "f1_at_optimal": 0.6387
+      },
+      "at_youden_threshold": {
+        "threshold": 0.7824,
+        "precision": 0.7201,
+        "recall": 0.5738,
+        "f1": 0.6387,
+        "accuracy": 0.8377,
+        "specificity": 0.9256,
+        "tp": 373,
+        "fp": 145,
+        "tn": 1805,
+        "fn": 277
+      },
+      "at_f1_optimal_threshold": {
+        "threshold": 0.7824,
+        "precision": 0.7201,
+        "recall": 0.5738,
+        "f1": 0.6387,
+        "accuracy": 0.8377,
+        "specificity": 0.9256,
+        "tp": 373,
+        "fp": 145,
+        "tn": 1805,
+        "fn": 277
+      },
+      "decile_analysis": [
+        {
+          "decile": 1,
+          "count": 260,
+          "positives": 202,
+          "event_rate": 0.7769,
+          "cumulative_capture": 0.3107999861240387,
+          "cumulative_lift": 3.1077
+        },
+        {
+          "decile": 2,
+          "count": 260,
+          "positives": 171,
+          "event_rate": 0.6577,
+          "cumulative_capture": 0.5738000273704529,
+          "cumulative_lift": 2.8692
+        },
+        {
+          "decile": 3,
+          "count": 260,
+          "positives": 32,
+          "event_rate": 0.1231,
+          "cumulative_capture": 0.6230999827384949,
+          "cumulative_lift": 2.0769
+        },
+        {
+          "decile": 4,
+          "count": 260,
+          "positives": 41,
+          "event_rate": 0.1577,
+          "cumulative_capture": 0.6862000226974487,
+          "cumulative_lift": 1.7154
+        },
+        {
+          "decile": 5,
+          "count": 260,
+          "positives": 40,
+          "event_rate": 0.1538,
+          "cumulative_capture": 0.7476999759674072,
+          "cumulative_lift": 1.4954
+        },
+        {
+          "decile": 6,
+          "count": 260,
+          "positives": 33,
+          "event_rate": 0.1269,
+          "cumulative_capture": 0.7985000014305115,
+          "cumulative_lift": 1.3308
+        },
+        {
+          "decile": 7,
+          "count": 260,
+          "positives": 32,
+          "event_rate": 0.1231,
+          "cumulative_capture": 0.8476999998092651,
+          "cumulative_lift": 1.211
+        },
+        {
+          "decile": 8,
+          "count": 260,
+          "positives": 34,
+          "event_rate": 0.1308,
+          "cumulative_capture": 0.8999999761581421,
+          "cumulative_lift": 1.125
+        },
+        {
+          "decile": 9,
+          "count": 260,
+          "positives": 33,
+          "event_rate": 0.1269,
+          "cumulative_capture": 0.9508000016212463,
+          "cumulative_lift": 1.0564
+        },
+        {
+          "decile": 10,
+          "count": 260,
+          "positives": 32,
+          "event_rate": 0.1231,
+          "cumulative_capture": 1.0,
+          "cumulative_lift": 1.0
+        }
+      ]
+    },
+    "ensemble": {
+      "model_name": "Ensemble",
+      "auc_roc": 0.7869,
+      "gini_coefficient": 0.5737,
+      "ks_statistic": 0.5349,
+      "average_precision_auc_pr": 0.7309,
+      "brier_score": 0.114,
+      "log_loss": 0.3883,
+      "mcc_at_0.5": 0.6471,
+      "at_threshold_0.5": {
+        "threshold": 0.5,
+        "precision": 0.9221,
+        "recall": 0.5462,
+        "f1": 0.686,
+        "accuracy": 0.875,
+        "specificity": 0.9846,
+        "tp": 355,
+        "fp": 30,
+        "tn": 1920,
+        "fn": 295
+      },
+      "optimal_thresholds": {
+        "youden_j_threshold": 0.5763,
+        "youden_j_value": 0.5349,
+        "sensitivity_at_j": 0.5462,
+        "specificity_at_j": 0.9887,
+        "f1_optimal_threshold": 0.5763,
+        "f1_at_optimal": 0.6913
+      },
+      "at_youden_threshold": {
+        "threshold": 0.5763,
+        "precision": 0.9415,
+        "recall": 0.5446,
+        "f1": 0.6901,
+        "accuracy": 0.8777,
+        "specificity": 0.9887,
+        "tp": 354,
+        "fp": 22,
+        "tn": 1928,
+        "fn": 296
+      },
+      "at_f1_optimal_threshold": {
+        "threshold": 0.5763,
+        "precision": 0.9415,
+        "recall": 0.5446,
+        "f1": 0.6901,
+        "accuracy": 0.8777,
+        "specificity": 0.9887,
+        "tp": 354,
+        "fp": 22,
+        "tn": 1928,
+        "fn": 296
+      },
+      "decile_analysis": [
+        {
+          "decile": 1,
+          "count": 260,
+          "positives": 260,
+          "event_rate": 1.0,
+          "cumulative_capture": 0.4000000059604645,
+          "cumulative_lift": 4.0
+        },
+        {
+          "decile": 2,
+          "count": 260,
+          "positives": 116,
+          "event_rate": 0.4462,
+          "cumulative_capture": 0.578499972820282,
+          "cumulative_lift": 2.8923
+        },
+        {
+          "decile": 3,
+          "count": 260,
+          "positives": 38,
+          "event_rate": 0.1462,
+          "cumulative_capture": 0.636900007724762,
+          "cumulative_lift": 2.1231
+        },
+        {
+          "decile": 4,
+          "count": 260,
+          "positives": 37,
+          "event_rate": 0.1423,
+          "cumulative_capture": 0.6937999725341797,
+          "cumulative_lift": 1.7346
+        },
+        {
+          "decile": 5,
+          "count": 260,
+          "positives": 38,
+          "event_rate": 0.1462,
+          "cumulative_capture": 0.7523000240325928,
+          "cumulative_lift": 1.5046
+        },
+        {
+          "decile": 6,
+          "count": 260,
+          "positives": 44,
+          "event_rate": 0.1692,
+          "cumulative_capture": 0.8199999928474426,
+          "cumulative_lift": 1.3667
+        },
+        {
+          "decile": 7,
+          "count": 260,
+          "positives": 33,
+          "event_rate": 0.1269,
+          "cumulative_capture": 0.8708000183105469,
+          "cumulative_lift": 1.244
+        },
+        {
+          "decile": 8,
+          "count": 260,
+          "positives": 29,
+          "event_rate": 0.1115,
+          "cumulative_capture": 0.9154000282287598,
+          "cumulative_lift": 1.1442
+        },
+        {
+          "decile": 9,
+          "count": 260,
+          "positives": 30,
+          "event_rate": 0.1154,
+          "cumulative_capture": 0.9614999890327454,
+          "cumulative_lift": 1.0684
+        },
+        {
+          "decile": 10,
+          "count": 260,
+          "positives": 25,
+          "event_rate": 0.0962,
+          "cumulative_capture": 1.0,
+          "cumulative_lift": 1.0
+        }
+      ]
+    }
+  },
+  "comparison": [
+    {
+      "model": "XGBoost",
+      "auc_roc": 0.7821,
+      "gini": 0.5642,
+      "ks_stat": 0.5318,
+      "avg_precision": 0.7276,
+      "brier": 0.1166,
+      "precision_05": 0.899,
+      "recall_05": 0.5477,
+      "f1_05": 0.6807,
+      "best_f1": 0.688,
+      "best_f1_thresh": 0.6339,
+      "recall_at_optimal": 0.5446,
+      "precision_at_optimal": 0.934
+    },
+    {
+      "model": "LightGBM",
+      "auc_roc": 0.8004,
+      "gini": 0.6008,
+      "ks_stat": 0.5344,
+      "avg_precision": 0.7404,
+      "brier": 0.1298,
+      "precision_05": 0.9461,
+      "recall_05": 0.54,
+      "f1_05": 0.6876,
+      "best_f1": 0.6914,
+      "best_f1_thresh": 0.4597,
+      "recall_at_optimal": 0.5446,
+      "precision_at_optimal": 0.9465
+    },
+    {
+      "model": "LSTM",
+      "auc_roc": 0.7604,
+      "gini": 0.5207,
+      "ks_stat": 0.4995,
+      "avg_precision": 0.6064,
+      "brier": 0.2056,
+      "precision_05": 0.446,
+      "recall_05": 0.68,
+      "f1_05": 0.5387,
+      "best_f1": 0.6387,
+      "best_f1_thresh": 0.7824,
+      "recall_at_optimal": 0.5738,
+      "precision_at_optimal": 0.7201
+    },
+    {
+      "model": "Ensemble",
+      "auc_roc": 0.7869,
+      "gini": 0.5737,
+      "ks_stat": 0.5349,
+      "avg_precision": 0.7309,
+      "brier": 0.114,
+      "precision_05": 0.9221,
+      "recall_05": 0.5462,
+      "f1_05": 0.686,
+      "best_f1": 0.6901,
+      "best_f1_thresh": 0.5763,
+      "recall_at_optimal": 0.5446,
+      "precision_at_optimal": 0.9415
+    }
+  ],
+  "best_model": "LightGBM",
+  "elapsed_seconds": 76.1
+}

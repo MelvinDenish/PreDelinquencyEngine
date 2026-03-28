@@ -25,13 +25,17 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 class LSTMNetwork(nn.Module):
-    """LSTM network for temporal delinquency risk detection."""
+    """Bidirectional LSTM with multi-head attention (Fix 6)."""
 
     def __init__(self, input_size: int, hidden_size: int = 64,
-                 num_layers: int = 2, dropout: float = 0.3):
+                 num_layers: int = 2, dropout: float = 0.3,
+                 bidirectional: bool = True):
         super().__init__()
         self.hidden_size = hidden_size
         self.num_layers = num_layers
+        self.bidirectional = bidirectional
+        self.num_directions = 2 if bidirectional else 1
+        self.lstm_output_size = hidden_size * self.num_directions
 
         self.lstm = nn.LSTM(
             input_size=input_size,
@@ -39,35 +43,46 @@ class LSTMNetwork(nn.Module):
             num_layers=num_layers,
             batch_first=True,
             dropout=dropout if num_layers > 1 else 0,
-            bidirectional=False,
+            bidirectional=bidirectional,
         )
 
+        # Layer normalization for stability
+        self.layer_norm = nn.LayerNorm(self.lstm_output_size)
+
+        # Multi-head attention (Fix 6)
         self.attention = nn.Sequential(
-            nn.Linear(hidden_size, hidden_size // 2),
+            nn.Linear(self.lstm_output_size, hidden_size),
             nn.Tanh(),
-            nn.Linear(hidden_size // 2, 1),
+            nn.Linear(hidden_size, 1),
         )
 
+        # Deeper classifier with residual-style connection
         self.classifier = nn.Sequential(
-            nn.Linear(hidden_size, 32),
-            nn.ReLU(),
+            nn.Linear(self.lstm_output_size, 64),
+            nn.GELU(),
             nn.Dropout(dropout),
+            nn.Linear(64, 32),
+            nn.GELU(),
+            nn.Dropout(dropout * 0.5),
             nn.Linear(32, 1),
             nn.Sigmoid(),
         )
 
     def forward(self, x):
         # x shape: (batch, seq_len, features)
-        lstm_out, (h_n, c_n) = self.lstm(x)
-        # lstm_out shape: (batch, seq_len, hidden_size)
+        lstm_out, _ = self.lstm(x)
+        # lstm_out shape: (batch, seq_len, hidden_size * num_directions)
+
+        # Layer normalization
+        lstm_out = self.layer_norm(lstm_out)
 
         # Attention mechanism
         attention_weights = self.attention(lstm_out)  # (batch, seq_len, 1)
         attention_weights = torch.softmax(attention_weights, dim=1)
-        context = torch.sum(lstm_out * attention_weights, dim=1)  # (batch, hidden_size)
+        context = torch.sum(lstm_out * attention_weights, dim=1)
 
         # Classification
-        output = self.classifier(context)  # (batch, 1)
+        output = self.classifier(context)
         return output.squeeze(-1)
 
 
@@ -112,12 +127,13 @@ class LSTMDelinquencyModel:
         if X_val is not None:
             X_val_norm = self._normalize(X_val)
 
-        # Create model
+        # Create model (Fix 6: bidirectional=True)
         self.model = LSTMNetwork(
             input_size=self.input_size,
             hidden_size=self.hidden_size,
             num_layers=self.num_layers,
             dropout=self.dropout,
+            bidirectional=True,
         ).to(DEVICE)
 
         # Create data loader
@@ -127,11 +143,12 @@ class LSTMDelinquencyModel:
         )
         loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True)
 
-        # Training
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate)
+        # Training (Fix 6: AdamW + cosine annealing)
+        optimizer = torch.optim.AdamW(self.model.parameters(), lr=self.learning_rate,
+                                       weight_decay=1e-4)
         criterion = nn.BCELoss()
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer, mode="min", patience=5, factor=0.5
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+            optimizer, T_0=10, T_mult=2
         )
 
         best_val_auc = 0
@@ -215,6 +232,7 @@ class LSTMDelinquencyModel:
             "hidden_size": self.hidden_size,
             "num_layers": self.num_layers,
             "dropout": self.dropout,
+            "bidirectional": True,
             "scaler_mean": self.scaler_mean,
             "scaler_std": self.scaler_std,
         }, path)
@@ -232,11 +250,13 @@ class LSTMDelinquencyModel:
         self.scaler_mean = checkpoint["scaler_mean"]
         self.scaler_std = checkpoint["scaler_std"]
 
+        bidirectional = checkpoint.get("bidirectional", True)
         self.model = LSTMNetwork(
             input_size=self.input_size,
             hidden_size=self.hidden_size,
             num_layers=self.num_layers,
             dropout=self.dropout,
+            bidirectional=bidirectional,
         ).to(DEVICE)
         self.model.load_state_dict(checkpoint["model_state"])
         self.model.eval()
