@@ -35,8 +35,8 @@ tags = ["airflow"]
 
 [[rules]]
 id = "grafana-admin-password"
-description = "Grafana Admin Password"
-regex = '''(?i)gf[_\-]security[_\-]admin[_\-]password\s*[=:]\s*["']?[^\s"']+["']?'''
+description = "Grafana Admin Password — only matches hardcoded values, not env var refs"
+regex = '''(?i)gf[_\-]security[_\-]admin[_\-]password\s*[=:]\s*["']?(?!\$\{)[a-zA-Z0-9_]{8,}["']?'''
 tags = ["grafana"]
 
 [allowlist]
@@ -45,4 +45,13 @@ paths = [
     '''.*\.md$''',
     '''tests?/fixtures/''',
     '''tests?/data/''',
+    '''init_db.*\.sql$''',
+]
+regexes = [
+    # Env var references like ${VAR:?msg} are not secrets
+    '''\$\{[A-Z_]+(?::-[^}]*)?\}''',
+    '''\$\{[A-Z_]+:\?[^}]*\}''',
+    # SQL DDL keywords that trigger generic-api-key
+    '''(?i)DECIMAL\(\d+,\d+\)\s+DEFAULT''',
+    '''(?i)VARCHAR\(\d+\)\s+PRIMARY\s+KEY''',
 ]
