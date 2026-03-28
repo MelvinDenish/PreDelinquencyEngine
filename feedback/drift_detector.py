@@ -1,7 +1,9 @@
 # pyre-ignore-all-errors
 """
-Drift Detection with Evidently AI
+Drift Detection with Evidently AI + Concept Drift Monitoring
 Monitors model performance and detects data/prediction drift.
+Concept drift tracks whether the relationship between features and
+outcomes is changing (e.g., model AUC degrading over time).
 Triggers retraining when accuracy degrades beyond threshold.
 """
 import os
@@ -41,7 +43,7 @@ def compute_drift_metrics() -> dict:
 
     # Get recent scores (last 7 days as current)
     current_df = pd.read_sql(
-        """SELECT risk_score, xgboost_score, lstm_score, ensemble_score
+        """SELECT risk_score, xgboost_score, ensemble_score
            FROM risk_scores
            WHERE scored_at > NOW() - INTERVAL '7 days'""",
         engine,
@@ -49,7 +51,7 @@ def compute_drift_metrics() -> dict:
 
     # Get baseline scores (8-30 days ago)
     baseline_df = pd.read_sql(
-        """SELECT risk_score, xgboost_score, lstm_score, ensemble_score
+        """SELECT risk_score, xgboost_score, ensemble_score
            FROM risk_scores
            WHERE scored_at BETWEEN NOW() - INTERVAL '30 days'
                  AND NOW() - INTERVAL '7 days'""",
@@ -59,7 +61,6 @@ def compute_drift_metrics() -> dict:
     if current_df.empty or baseline_df.empty:
         return {"status": "insufficient_data", "drift_detected": False}
 
-    # Fill NaN for LSTM scores
     for df in [current_df, baseline_df]:
         df.fillna(0, inplace=True)
 
@@ -164,14 +165,122 @@ def log_drift_result(drift_result: dict):
     conn.close()
 
 
-def check_and_alert():
-    """Run drift detection and trigger retraining if needed."""
-    logger.info("[DriftDetector] Running drift detection...")
-    result = compute_drift_metrics()
-    log_drift_result(result)
+def compute_concept_drift(auc_drop_threshold: float = 0.05) -> dict:
+    """
+    Detect concept drift by comparing recent model performance against baseline.
 
-    if result.get("drift_detected"):
-        logger.warning("[DriftDetector] DRIFT DETECTED! Triggering retraining...")
+    Concept drift = the relationship between features and outcomes changes,
+    even if the feature distributions stay the same. Detected by tracking
+    rolling AUC on recent predictions with known outcomes (from feedback_events).
+
+    Args:
+        auc_drop_threshold: Flag concept drift if AUC drops by more than this
+                            relative to the baseline (default 5%)
+
+    Returns:
+        dict with concept drift status, rolling AUC, baseline AUC, and delta
+    """
+    from sklearn.metrics import roc_auc_score
+
+    engine = create_engine(PostgresConfig.get_url())
+
+    # Get recent predictions that have known outcomes (from feedback_events)
+    # feedback_events records whether a scored customer actually defaulted
+    recent_df = pd.read_sql("""
+        SELECT rs.risk_score AS predicted_score,
+               CASE WHEN fe.outcome = 'defaulted' THEN 1 ELSE 0 END AS actual_label
+        FROM risk_scores rs
+        INNER JOIN feedback_events fe
+            ON rs.customer_id = fe.customer_id
+        WHERE rs.scored_at > NOW() - INTERVAL '14 days'
+          AND fe.created_at > NOW() - INTERVAL '14 days'
+    """, engine)
+
+    # Get baseline performance from model_registry (set during training)
+    baseline_df = pd.read_sql("""
+        SELECT metrics->>'test_auc' AS baseline_auc
+        FROM model_registry
+        WHERE model_name = 'ensemble'
+        ORDER BY registered_at DESC
+        LIMIT 1
+    """, engine)
+
+    # Fallback baseline AUC if model_registry doesn't have it
+    baseline_auc = 0.85
+    if not baseline_df.empty and baseline_df.iloc[0]["baseline_auc"]:
+        try:
+            baseline_auc = float(baseline_df.iloc[0]["baseline_auc"])
+        except (ValueError, TypeError):
+            pass
+
+    if recent_df.empty or len(recent_df) < 30:
+        return {
+            "status": "insufficient_data",
+            "concept_drift_detected": False,
+            "message": f"Need ≥30 scored+outcome pairs, have {len(recent_df)}",
+            "timestamp": datetime.now().isoformat(),
+        }
+
+    n_pos = int(recent_df["actual_label"].sum())
+    if n_pos == 0 or n_pos == len(recent_df):
+        return {
+            "status": "insufficient_class_variance",
+            "concept_drift_detected": False,
+            "message": f"All labels are {'positive' if n_pos > 0 else 'negative'} — cannot compute AUC",
+            "timestamp": datetime.now().isoformat(),
+        }
+
+    rolling_auc = roc_auc_score(recent_df["actual_label"], recent_df["predicted_score"])
+    auc_delta = baseline_auc - rolling_auc
+    concept_drift_detected = auc_delta > auc_drop_threshold
+
+    result = {
+        "status": "computed",
+        "concept_drift_detected": concept_drift_detected,
+        "rolling_auc": round(float(rolling_auc), 4),
+        "baseline_auc": round(float(baseline_auc), 4),
+        "auc_delta": round(float(auc_delta), 4),
+        "auc_drop_threshold": auc_drop_threshold,
+        "n_samples": len(recent_df),
+        "n_positive": n_pos,
+        "timestamp": datetime.now().isoformat(),
+    }
+
+    if concept_drift_detected:
+        logger.warning(
+            f"[DriftDetector] CONCEPT DRIFT: AUC dropped {auc_delta:.3f} "
+            f"({baseline_auc:.3f} → {rolling_auc:.3f}), threshold={auc_drop_threshold}"
+        )
+    else:
+        logger.info(
+            f"[DriftDetector] No concept drift: AUC {rolling_auc:.3f} "
+            f"(baseline {baseline_auc:.3f}, delta {auc_delta:.3f})"
+        )
+
+    return result
+
+
+def check_and_alert():
+    """Run data drift + concept drift detection and trigger retraining if needed."""
+    logger.info("[DriftDetector] Running drift detection...")
+
+    # Data/prediction drift (distribution shifts)
+    data_drift = compute_drift_metrics()
+    log_drift_result(data_drift)
+
+    # Concept drift (model performance degradation)
+    concept_drift = compute_concept_drift()
+    log_drift_result(concept_drift)
+
+    data_drifted = data_drift.get("drift_detected", False)
+    concept_drifted = concept_drift.get("concept_drift_detected", False)
+
+    if concept_drifted:
+        logger.warning("[DriftDetector] CONCEPT DRIFT DETECTED — model performance degraded. Retraining recommended.")
+    if data_drifted:
+        logger.warning("[DriftDetector] DATA DRIFT DETECTED — input distributions shifted.")
+
+    if data_drifted or concept_drifted:
         return True
     else:
         logger.info("[DriftDetector] No significant drift detected.")

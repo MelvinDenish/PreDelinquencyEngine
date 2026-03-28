@@ -151,8 +151,13 @@ def _generate_salary_credit(customer: Dict, current_date: datetime, is_stressed:
     return None
 
 
-def _generate_emi_payment(customer: Dict, current_date: datetime, is_stressed: bool) -> Optional[Dict]:
-    """Generate EMI auto-debit payments."""
+def _generate_emi_payment(customer: Dict, current_date: datetime,
+                          is_stressed: bool, current_balance: float = None) -> Optional[Dict]:
+    """Generate EMI auto-debit payments with balance-based failure detection.
+
+    If current_balance is provided, EMI fails when balance is insufficient
+    (realistic simulation). Otherwise falls back to probability-based failure.
+    """
     # EMI due dates: typically 5th or 15th of month
     if current_date.day not in [5, 15]:
         return None
@@ -167,11 +172,15 @@ def _generate_emi_payment(customer: Dict, current_date: datetime, is_stressed: b
     else:
         emi_amount = round(customer["monthly_salary"] * random.uniform(0.10, 0.20), 2)
 
-    # Stressed customers: EMIs sometimes fail
-    if is_stressed:
-        status = random.choices(["success", "failed"], weights=[60, 40], k=1)[0]
+    # Balance-based failure: EMI fails if insufficient funds
+    if current_balance is not None:
+        status = "success" if current_balance >= emi_amount else "failed"
     else:
-        status = random.choices(["success", "failed"], weights=[97, 3], k=1)[0]
+        # Fallback to probability-based (legacy)
+        if is_stressed:
+            status = random.choices(["success", "failed"], weights=[60, 40], k=1)[0]
+        else:
+            status = random.choices(["success", "failed"], weights=[97, 3], k=1)[0]
 
     return {
         "txn_type": "emi" if status == "success" else "auto_debit",
@@ -205,11 +214,20 @@ def generate_transactions_for_customer(
     start_date: datetime,
     end_date: datetime,
     total_months: int = 6,
-) -> List[Dict]:
-    """Generate all transactions for a single customer over the date range."""
+) -> tuple:
+    """Generate all transactions for a single customer over the date range.
+
+    Returns:
+        tuple: (transactions: List[Dict], payment_events: List[Dict])
+        payment_events contains missed EMI/auto-debit events for outcome-based labeling.
+    """
     transactions = []
+    payment_events = []
     is_stressed = customer.get("is_stressed", False)
     current_date = start_date
+
+    # Initialize running balance for balance-based EMI failure detection
+    running_balance = round(customer["monthly_salary"] * random.uniform(1.5, 6.0), 2)
 
     while current_date <= end_date:
         months_in = (current_date.year - start_date.year) * 12 + (current_date.month - start_date.month)
@@ -225,9 +243,11 @@ def generate_transactions_for_customer(
                 minute=random.randint(0, 59),
             ).isoformat()
             transactions.append(salary_txn)
+            running_balance += salary_txn["amount"]
 
-        # 2. EMI payment
-        emi_txn = _generate_emi_payment(customer, current_date, is_stressed)
+        # 2. EMI payment (balance-based failure)
+        emi_txn = _generate_emi_payment(customer, current_date, is_stressed,
+                                         current_balance=running_balance)
         if emi_txn:
             emi_txn["customer_id"] = customer["customer_id"]
             emi_txn["txn_id"] = f"TXN_{uuid.uuid4().hex[:16].upper()}"
@@ -236,6 +256,19 @@ def generate_transactions_for_customer(
                 minute=random.randint(0, 59),
             ).isoformat()
             transactions.append(emi_txn)
+
+            if emi_txn["status"] == "success":
+                running_balance -= emi_txn["amount"]
+            else:
+                # Record missed payment event (this becomes the ML label)
+                payment_events.append({
+                    "customer_id": customer["customer_id"],
+                    "event_type": "missed_emi" if emi_txn["txn_type"] == "auto_debit" else "missed_auto_debit",
+                    "amount": emi_txn["amount"],
+                    "due_date": current_date.strftime("%Y-%m-%d"),
+                    "balance_at_event": round(running_balance, 2),
+                    "event_date": emi_txn["timestamp"],
+                })
 
         # 3. ATM withdrawal
         atm_txn = _generate_atm_withdrawal(customer, is_stressed, current_date.day)
@@ -247,6 +280,8 @@ def generate_transactions_for_customer(
                 minute=random.randint(0, 59),
             ).isoformat()
             transactions.append(atm_txn)
+            if atm_txn["status"] == "success":
+                running_balance -= atm_txn["amount"]
 
         # 4. Normal spending transactions
         for category, prob in NORMAL_TXN_PROBS.items():
@@ -276,6 +311,8 @@ def generate_transactions_for_customer(
                     ).isoformat(),
                 }
                 transactions.append(txn)
+                if direction == "debit":
+                    running_balance -= amount
 
         # 5. Stressed customer: risky transactions (increase with stress_mult)
         if is_stressed and stress_mult > 1.0:
@@ -302,10 +339,16 @@ def generate_transactions_for_customer(
                         ).isoformat(),
                     }
                     transactions.append(txn)
+                    if direction == "debit":
+                        running_balance -= amount
+
+        # Prevent balance from going too negative (customer would stop spending)
+        if running_balance < -customer["monthly_salary"] * 0.5:
+            running_balance = -customer["monthly_salary"] * 0.5
 
         current_date += timedelta(days=1)
 
-    return transactions
+    return transactions, payment_events
 
 
 def generate_account_balances(customer: Dict, transactions: List[Dict]) -> List[Dict]:
@@ -418,6 +461,40 @@ def save_balances_to_db(balances: List[Dict]):
     cursor.close()
     conn.close()
     print(f"[TransactionGenerator] Saved {len(balances)} balance snapshots to PostgreSQL")
+
+
+def save_payment_events_to_db(payment_events: List[Dict]):
+    """Save missed payment events to PostgreSQL for outcome-based ML labels."""
+    if not payment_events:
+        return
+    conn = psycopg2.connect(
+        host=PostgresConfig.HOST, port=PostgresConfig.PORT,
+        user=PostgresConfig.USER, password=PostgresConfig.PASSWORD,
+        dbname=PostgresConfig.DB,
+    )
+    cursor = conn.cursor()
+
+    values = [
+        (pe["customer_id"], pe["event_type"], pe["amount"],
+         pe["due_date"], pe["balance_at_event"], pe["event_date"])
+        for pe in payment_events
+    ]
+
+    chunk_size = 5000
+    for i in range(0, len(values), chunk_size):
+        chunk = values[i:i + chunk_size]
+        execute_values(
+            cursor,
+            """INSERT INTO payment_events
+                (customer_id, event_type, amount, due_date, balance_at_event, event_date)
+            VALUES %s""",
+            chunk,
+        )
+        conn.commit()
+
+    cursor.close()
+    conn.close()
+    print(f"[TransactionGenerator] Saved {len(payment_events)} payment events to PostgreSQL")
 
 
 def publish_transactions_to_kafka(transactions: List[Dict], producer: KafkaProducer = None):

@@ -20,6 +20,7 @@ from data_generator.transaction_generator import (
     generate_account_balances,
     save_transactions_to_db,
     save_balances_to_db,
+    save_payment_events_to_db,
     publish_transactions_to_kafka,
     publish_balances_to_kafka,
 )
@@ -82,23 +83,29 @@ def run_full_generation():
 
     all_transactions = []
     all_balances = []
+    all_payment_events = []
 
     for customer in tqdm(customers, desc="  Generating transactions"):
-        txns = generate_transactions_for_customer(
+        txns, payment_events = generate_transactions_for_customer(
             customer, start_date, end_date,
             total_months=DataGenConfig.TRANSACTION_MONTHS,
         )
         balances = generate_account_balances(customer, txns)
         all_transactions.extend(txns)
         all_balances.extend(balances)
+        all_payment_events.extend(payment_events)
 
+    delinquent_customers = len(set(pe["customer_id"] for pe in all_payment_events))
     print(f"  -> {len(all_transactions)} total transactions generated")
     print(f"  -> {len(all_balances)} balance snapshots generated")
+    print(f"  -> {len(all_payment_events)} missed payment events ({delinquent_customers} customers)")
+    print(f"  -> Delinquency rate: {delinquent_customers/len(customers)*100:.1f}%")
 
     # Step 5: Save to PostgreSQL
-    print("\n[5/5] Saving transactions and balances to PostgreSQL...")
+    print("\n[5/5] Saving transactions, balances, and payment events to PostgreSQL...")
     save_transactions_to_db(all_transactions)
     save_balances_to_db(all_balances)
+    save_payment_events_to_db(all_payment_events)
 
     # Step 6: Publish to Kafka (recent transactions only - last 30 days)
     print("\n[Bonus] Publishing recent transactions to Kafka...")
@@ -120,11 +127,13 @@ def run_full_generation():
     print(f"  Transactions:  {len(all_transactions)}")
     print(f"  Balances:      {len(all_balances)}")
     print(f"  Stressed:      {stressed_count} ({stressed_count/len(customers)*100:.1f}%)")
+    print(f"  Delinquent:    {delinquent_customers} ({delinquent_customers/len(customers)*100:.1f}%)")
+    print(f"  Payment Events:{len(all_payment_events)}")
     print(f"  Date Range:    {start_date.strftime('%Y-%m-%d')} -> {end_date.strftime('%Y-%m-%d')}")
     print(f"  Kafka Topics:  {KafkaConfig.TOPIC_TRANSACTIONS}, {KafkaConfig.TOPIC_ACCOUNT_UPDATES}")
     print("=" * 70)
 
-    return customers, all_transactions, all_balances
+    return customers, all_transactions, all_balances, all_payment_events
 
 
 if __name__ == "__main__":

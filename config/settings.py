@@ -172,13 +172,19 @@ class ModelConfig:
         "insurance_missed_payments_3m",
         # M3: Employer health
         "employer_health_score",
+        # M4: Domain-specific banking distress signals
+        "salary_to_emi_gap_days",
+        "upi_failure_rate_7d",
+        "weekend_atm_ratio_7d",
+        "min_balance_velocity_30d",
+        "late_night_txn_ratio_7d",
     ]
 
 
 class DataGenConfig:
     NUM_CUSTOMERS = int(os.getenv("NUM_CUSTOMERS", 1000))
     TRANSACTION_MONTHS = int(os.getenv("TRANSACTION_MONTHS", 6))
-    STRESS_CUSTOMER_PCT = float(os.getenv("STRESS_CUSTOMER_PCT", 0.20))
+    STRESS_CUSTOMER_PCT = float(os.getenv("STRESS_CUSTOMER_PCT", 0.12))
 
 
 class SecurityConfig:

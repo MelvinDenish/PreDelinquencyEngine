@@ -18,6 +18,20 @@ from config.settings import ModelConfig
 
 logger = logging.getLogger(__name__)
 
+# Load optimized thresholds if available (from cost-sensitive threshold tuning)
+_OPTIMIZED_THRESHOLDS = None
+_THRESHOLDS_PATH = os.path.join(os.path.dirname(__file__), '..', 'models', 'thresholds.joblib')
+if os.path.exists(_THRESHOLDS_PATH):
+    try:
+        _OPTIMIZED_THRESHOLDS = joblib.load(_THRESHOLDS_PATH)
+        logger.info(
+            f"[Ensemble] Loaded optimized thresholds: "
+            f"critical={_OPTIMIZED_THRESHOLDS['critical_threshold']}, "
+            f"watch={_OPTIMIZED_THRESHOLDS['watch_threshold']}"
+        )
+    except Exception as e:
+        logger.warning(f"[Ensemble] Failed to load thresholds: {e}")
+
 
 class EnsembleScorer:
     """3-model ensemble: XGBoost + LightGBM + TFT (fixed weights)."""
@@ -93,9 +107,20 @@ class EnsembleScorer:
     @staticmethod
     def score_to_risk_tier(score: float, segment_type: str = None,
                            segment_thresholds: dict = None) -> str:
-        """Map ensemble score to risk tier, optionally segment-adjusted."""
-        watch = 0.50
-        critical = 0.70
+        """Map ensemble score to risk tier using cost-optimized thresholds.
+
+        Priority: segment_thresholds > optimized thresholds > config defaults.
+        """
+        # Default from config
+        watch = ModelConfig.RISK_WATCH_THRESHOLD
+        critical = ModelConfig.RISK_CRITICAL_THRESHOLD
+
+        # Override with cost-optimized thresholds if available
+        if _OPTIMIZED_THRESHOLDS:
+            critical = _OPTIMIZED_THRESHOLDS["critical_threshold"]
+            watch = _OPTIMIZED_THRESHOLDS["watch_threshold"]
+
+        # Segment-level overrides take highest priority
         if segment_thresholds:
             watch = segment_thresholds.get("watch", watch)
             critical = segment_thresholds.get("critical", critical)

@@ -68,6 +68,12 @@ CREATE TABLE IF NOT EXISTS streaming_features (
     txn_count_30d INTEGER DEFAULT 0,
     avg_txn_amount_7d DECIMAL(12,2) DEFAULT 0,
     max_txn_amount_7d DECIMAL(12,2) DEFAULT 0,
+    -- M4: Domain-specific banking distress signals
+    salary_to_emi_gap_days INTEGER DEFAULT 0,          -- days between salary credit and EMI debit (shrinking = stress)
+    upi_failure_rate_7d DECIMAL(8,4) DEFAULT 0,        -- failed UPI / total UPI (rising = insufficient balance)
+    weekend_atm_ratio_7d DECIMAL(8,4) DEFAULT 0,       -- weekend ATM / total ATM (high = desperation cash)
+    min_balance_velocity_30d DECIMAL(12,2) DEFAULT 0,   -- rate of change of monthly minimum balance
+    late_night_txn_ratio_7d DECIMAL(8,4) DEFAULT 0,     -- 11PM-5AM transactions / total (behavioral distress)
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
@@ -318,6 +324,25 @@ ALTER TABLE batch_features ADD COLUMN IF NOT EXISTS vendor_payment_count_90d INT
 -- Additional Phase 2 indexes
 CREATE INDEX IF NOT EXISTS idx_risk_scores_tte ON risk_scores(tte_days) WHERE tte_days IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_customers_household_id ON customers(household_id) WHERE household_id IS NOT NULL;
+
+-- ============================================================
+-- PAYMENT EVENTS (outcome-based labels for ML training)
+-- ============================================================
+
+-- Records actual missed payment events from the financial simulation.
+-- These are the ML training LABELS — a customer is "delinquent" if they have
+-- missed_emi or missed_auto_debit events in the outcome window.
+CREATE TABLE IF NOT EXISTS payment_events (
+    id BIGSERIAL PRIMARY KEY,
+    customer_id VARCHAR(50) REFERENCES customers(customer_id),
+    event_type VARCHAR(30) NOT NULL,          -- missed_emi, missed_auto_debit, bounced_cheque
+    amount DECIMAL(15, 2),                    -- EMI/payment amount that was missed
+    due_date DATE,                            -- when the payment was due
+    balance_at_event DECIMAL(15, 2),          -- account balance when the miss occurred
+    event_date TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_payment_events_cust ON payment_events(customer_id);
+CREATE INDEX IF NOT EXISTS idx_payment_events_date ON payment_events(event_date);
 
 -- ============================================================
 -- SECURITY TABLES (Phase: Production Hardening)

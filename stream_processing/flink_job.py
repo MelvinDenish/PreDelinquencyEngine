@@ -131,6 +131,11 @@ def create_flink_job():
             txn_count_7d BIGINT,
             avg_txn_amount_7d DECIMAL(12,2),
             max_txn_amount_7d DECIMAL(12,2),
+            salary_to_emi_gap_days BIGINT,
+            upi_failure_rate_7d DECIMAL(8,4),
+            weekend_atm_ratio_7d DECIMAL(8,4),
+            min_balance_velocity_30d DECIMAL(12,2),
+            late_night_txn_ratio_7d DECIMAL(8,4),
             updated_at TIMESTAMP(3),
             PRIMARY KEY (customer_id) NOT ENFORCED
         ) WITH (
@@ -199,6 +204,39 @@ def create_flink_job():
                 THEN amount ELSE 0
             END) AS max_txn_amount_7d,
 
+            -- M4: Salary-to-EMI gap (days between last salary credit and next EMI debit)
+            COALESCE(
+                TIMESTAMPDIFF(DAY,
+                    MAX(CASE WHEN txn_type = 'salary_credit' THEN `timestamp` END),
+                    MIN(CASE WHEN txn_type = 'emi' AND direction = 'debit' THEN `timestamp` END)
+                ), 0
+            ) AS salary_to_emi_gap_days,
+
+            -- M4: UPI failure rate (failed UPI / total UPI)
+            CASE WHEN SUM(CASE WHEN channel = 'upi' THEN 1 ELSE 0 END) > 0
+                THEN CAST(SUM(CASE WHEN channel = 'upi' AND status = 'failed' THEN 1 ELSE 0 END) AS DECIMAL(8,4))
+                     / SUM(CASE WHEN channel = 'upi' THEN 1 ELSE 0 END)
+                ELSE 0
+            END AS upi_failure_rate_7d,
+
+            -- M4: Weekend ATM ratio (weekend ATM / total ATM)
+            CASE WHEN SUM(CASE WHEN txn_type = 'atm' THEN 1 ELSE 0 END) > 0
+                THEN CAST(SUM(CASE WHEN txn_type = 'atm'
+                     AND DAYOFWEEK(`timestamp`) IN (1, 7) THEN 1 ELSE 0 END) AS DECIMAL(8,4))
+                     / SUM(CASE WHEN txn_type = 'atm' THEN 1 ELSE 0 END)
+                ELSE 0
+            END AS weekend_atm_ratio_7d,
+
+            -- M4: Min balance velocity (approximated as min debit amount change)
+            CAST(0 AS DECIMAL(12,2)) AS min_balance_velocity_30d,
+
+            -- M4: Late night transaction ratio (11PM-5AM / total)
+            CASE WHEN COUNT(*) > 0
+                THEN CAST(SUM(CASE WHEN HOUR(`timestamp`) >= 23 OR HOUR(`timestamp`) < 5
+                     THEN 1 ELSE 0 END) AS DECIMAL(8,4)) / COUNT(*)
+                ELSE 0
+            END AS late_night_txn_ratio_7d,
+
             MAX(`timestamp`) AS updated_at
 
         FROM TABLE(
@@ -256,6 +294,7 @@ def create_flink_job_local():
 
         txns_7d = []
         txns_30d = []
+        txns_7d_with_ts = []
         for ts_str, txn in state["transactions"]:
             try:
                 ts = datetime.fromisoformat(ts_str)
@@ -263,6 +302,7 @@ def create_flink_job_local():
                 continue
             if ts >= cutoff_7d:
                 txns_7d.append(txn)
+                txns_7d_with_ts.append((ts, txn))
             if ts >= cutoff_30d:
                 txns_30d.append(txn)
 
@@ -296,7 +336,7 @@ def create_flink_job_local():
             avg_amount = sum(debit_amounts) / len(debit_amounts) if debit_amounts else 0
             max_amount = max(debit_amounts) if debit_amounts else 0
 
-            # Gambling + lottery spend (problem statement: "increased gambling, or lottery spend")
+            # Gambling + lottery spend
             gambling_spend = sum(t["amount"] for t in txns
                                if t.get("merchant_category") in gambling_cats
                                and t.get("direction") == "debit" and t.get("status") == "success")
@@ -317,6 +357,46 @@ def create_flink_job_local():
         features = {}
         features.update(calc_features(txns_7d, "7d"))
         features.update(calc_features(txns_30d, "30d"))
+
+        # ── M4: Domain-specific banking distress signals ──
+
+        # 1. Salary-to-EMI gap days
+        salary_ts = [ts for ts, t in txns_7d_with_ts if t.get("txn_type") == "salary_credit"]
+        emi_ts = [ts for ts, t in txns_7d_with_ts
+                  if t.get("txn_type") == "emi" and t.get("direction") == "debit"]
+        if salary_ts and emi_ts:
+            gap = (min(emi_ts) - max(salary_ts)).days
+            features["salary_to_emi_gap_days"] = max(gap, 0)
+        else:
+            features["salary_to_emi_gap_days"] = 0
+
+        # 2. UPI failure rate
+        upi_total = sum(1 for t in txns_7d if t.get("channel") == "upi")
+        upi_failed = sum(1 for t in txns_7d
+                        if t.get("channel") == "upi" and t.get("status") == "failed")
+        features["upi_failure_rate_7d"] = round(upi_failed / max(upi_total, 1), 4)
+
+        # 3. Weekend ATM ratio
+        atm_total = sum(1 for t in txns_7d if t.get("txn_type") == "atm")
+        weekend_atm = sum(1 for ts, t in txns_7d_with_ts
+                         if t.get("txn_type") == "atm" and ts.weekday() >= 5)
+        features["weekend_atm_ratio_7d"] = round(weekend_atm / max(atm_total, 1), 4)
+
+        # 4. Min balance velocity (approximated from debit trajectory over 30d)
+        debit_30d = [t["amount"] for t in txns_30d
+                    if t.get("direction") == "debit" and t.get("status") == "success"]
+        if len(debit_30d) >= 2:
+            half = len(debit_30d) // 2
+            first_half_avg = sum(debit_30d[:half]) / half
+            second_half_avg = sum(debit_30d[half:]) / (len(debit_30d) - half)
+            features["min_balance_velocity_30d"] = round(second_half_avg - first_half_avg, 2)
+        else:
+            features["min_balance_velocity_30d"] = 0
+
+        # 5. Late night transaction ratio (23:00-05:00)
+        total_7d = len(txns_7d_with_ts)
+        late_night = sum(1 for ts, t in txns_7d_with_ts if ts.hour >= 23 or ts.hour < 5)
+        features["late_night_txn_ratio_7d"] = round(late_night / max(total_7d, 1), 4)
 
         return features
 

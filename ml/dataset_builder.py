@@ -2,7 +2,12 @@
 """
 Dataset Builder
 Builds training datasets from PostgreSQL by merging streaming features,
-batch features, and outcome labels.
+batch features, and outcome-based labels from payment_events.
+
+Labels are derived from ACTUAL missed payment events (insufficient balance
+for EMI on due date), NOT from a formula over input features. This eliminates
+label leakage — features come from behavioral history, labels come from
+future payment outcomes.
 """
 import os
 import sys
@@ -17,19 +22,22 @@ from config.settings import PostgresConfig, ModelConfig
 
 def build_training_dataset() -> tuple:
     """
-    Build training dataset from PostgreSQL.
+    Build training dataset from PostgreSQL with outcome-based labels.
     Returns (X, y, feature_names, customer_ids) tuple.
 
-    Labels are generated based on actual behavioral signals:
-    - Customers with high lending_app activity, failed auto-debits,
-      salary delays, and spending increases are labeled as at-risk.
+    Features: streaming_features + batch_features (behavioral history)
+    Labels: payment_events table (actual missed EMI/auto-debit events)
+
+    No label leakage — features and labels are derived from different
+    data sources. Features capture behavioral patterns; labels capture
+    actual payment outcomes from the financial simulation.
     """
     engine = create_engine(PostgresConfig.get_url())
 
-    # Load streaming features
+    # Load streaming features (computed from transaction history)
     streaming_df = pd.read_sql("SELECT * FROM streaming_features", engine)
 
-    # Load batch features
+    # Load batch features (computed from periodic aggregations)
     batch_df = pd.read_sql("SELECT * FROM batch_features", engine)
 
     # Merge on customer_id
@@ -40,49 +48,33 @@ def build_training_dataset() -> tuple:
         print("[DatasetBuilder] WARNING: No feature data found. Run data generation and feature computation first.")
         return None, None, None, None
 
-    # Generate labels from actual behavioral signals
-    # This creates a composite risk signal based on real feature patterns
-    # Fix 5: Added non-linear interactions to break circular dependency
-    lending_7d = merged.get("lending_app_txn_count_7d", 0).fillna(0).astype(float)
-    failed_7d = merged.get("failed_autodebits_count_7d", 0).fillna(0).astype(float)
-    salary_delay = merged.get("salary_delay_days", 0).fillna(0).astype(float).clip(0, 30)
-    savings_chg = merged.get("savings_balance_pct_change_7d", 0).fillna(0).astype(float)
-    disc_trend = merged.get("discretionary_spend_trend", 1.0).fillna(1.0).astype(float).clip(0, 3)
-    w_lending = merged.get("weighted_lending_risk_7d", 0).fillna(0).astype(float).clip(0, 5)
-    util_delay = merged.get("utility_payment_delay_avg", 0).fillna(0).astype(float).clip(0, 30)
+    # ─── Outcome-based labels from payment_events ───────────────
+    # Label = 1 if customer had any missed payment (insufficient balance for EMI)
+    # These events are generated during the financial simulation when
+    # a customer's running balance cannot cover their EMI on the due date.
+    outcome_df = pd.read_sql("""
+        SELECT customer_id,
+               COUNT(*) as missed_payment_count
+        FROM payment_events
+        GROUP BY customer_id
+    """, engine)
 
-    merged["risk_signal"] = (
-        # Linear components
-        (lending_7d * 0.12) +
-        (failed_7d * 0.15) +
-        (salary_delay / 30 * 0.10) +
-        ((-savings_chg).clip(0, 1) * 0.10) +
-        (disc_trend / 3 * 0.08) +
-        (w_lending / 5 * 0.10) +
-        (util_delay / 30 * 0.05) +
-        # Non-linear interaction terms (Fix 5: breaks circular dependency)
-        (np.sqrt(lending_7d * failed_7d.clip(0, 10)) * 0.10) +
-        ((salary_delay / 30) * (w_lending / 5) * 0.08) +
-        (np.log1p(lending_7d) * np.log1p(failed_7d) * 0.07) +
-        # Acceleration signal
-        ((disc_trend / 3) * ((-savings_chg).clip(0, 1)) * 0.05)
-    )
-
-    # Normalize risk_signal to [0, 1]
-    min_signal = merged["risk_signal"].min()
-    max_signal = merged["risk_signal"].max()
-    if max_signal > min_signal:
-        merged["risk_signal_norm"] = (merged["risk_signal"] - min_signal) / (max_signal - min_signal)
+    if outcome_df.empty:
+        print("[DatasetBuilder] WARNING: No payment events found. Labels will be all zeros.")
+        print("  -> Run data generation first to populate payment_events table.")
+        merged["label"] = 0
     else:
-        merged["risk_signal_norm"] = 0.0
+        outcome_df["label"] = 1
+        merged = merged.merge(
+            outcome_df[["customer_id", "label"]],
+            on="customer_id", how="left"
+        )
+        merged["label"] = merged["label"].fillna(0).astype(int)
 
-    # Fix 5: Increased noise for realistic variance (0.05 -> 0.08)
-    noise = np.random.normal(0, 0.08, len(merged))
-    merged["risk_signal_norm"] = (merged["risk_signal_norm"] + noise).clip(0, 1)
-
-    # Binary label: 1 = delinquent risk, 0 = stable
-    threshold = merged["risk_signal_norm"].quantile(0.75)  # Top 25% as at-risk
-    merged["label"] = (merged["risk_signal_norm"] >= threshold).astype(int)
+    delinquent_count = int(merged["label"].sum())
+    total = len(merged)
+    print(f"[DatasetBuilder] Labels from payment_events: "
+          f"{delinquent_count}/{total} delinquent ({delinquent_count/max(total,1)*100:.1f}%)")
 
     # Select feature columns
     feature_cols = []
@@ -99,7 +91,7 @@ def build_training_dataset() -> tuple:
         if merged[col].dtype == bool:
             merged[col] = merged[col].astype(int)
 
-    # ── Fix 4: Feature Engineering — Ratio & Interaction Features ──
+    # ── Feature Engineering — Ratio & Interaction Features ──
     eps = 1e-6
     total_spend_7d = merged.get("total_spend_7d", pd.Series(0, index=merged.index)).fillna(0).astype(float)
     total_spend_30d = merged.get("total_spend_30d", pd.Series(0, index=merged.index)).fillna(0).astype(float)
@@ -133,18 +125,20 @@ def build_training_dataset() -> tuple:
     customer_ids = merged["customer_id"].values
 
     print(f"[DatasetBuilder] Built dataset: {X.shape[0]} samples, {X.shape[1]} features")
-    print(f"  -> Positive (at-risk): {int(y.sum())} ({y.mean()*100:.1f}%)")
-    print(f"  -> Negative (stable):  {int(len(y) - y.sum())} ({(1-y.mean())*100:.1f}%)")
-    print(f"  -> Engineered features added: {len(engineered_features)}")
+    print(f"  -> Positive (delinquent): {int(y.sum())} ({y.mean()*100:.1f}%)")
+    print(f"  -> Negative (stable):     {int(len(y) - y.sum())} ({(1-y.mean())*100:.1f}%)")
+    print(f"  -> Engineered features: {len(engineered_features)}")
 
     return X, y, feature_cols, customer_ids
 
 
 def build_temporal_dataset(sequence_length: int = 30) -> tuple:
     """
-    Build temporal dataset for LSTM training.
+    Build temporal dataset for TFT training.
     Creates sequences of daily feature snapshots per customer.
     Returns (X_sequences, y, customer_ids).
+
+    Labels use outcome-based payment_events (same as tabular dataset).
     """
     engine = create_engine(PostgresConfig.get_url())
 
@@ -170,6 +164,14 @@ def build_temporal_dataset(sequence_length: int = 30) -> tuple:
     if df.empty:
         return None, None, None
 
+    # Get outcome-based labels from payment_events
+    outcome_df = pd.read_sql("""
+        SELECT customer_id, 1 as label
+        FROM payment_events
+        GROUP BY customer_id
+    """, engine)
+    label_map = dict(zip(outcome_df["customer_id"], outcome_df["label"])) if not outcome_df.empty else {}
+
     # Build sequences
     feature_cols = ["daily_spend", "daily_txn_count", "daily_atm_count",
                     "daily_lending_count", "daily_failed_count",
@@ -191,17 +193,8 @@ def build_temporal_dataset(sequence_length: int = 30) -> tuple:
         # Take last `sequence_length` days
         seq = values[-sequence_length:]
 
-        # Label: based on last week's behavior trends
-        last_week = values[-7:] if len(values) >= 7 else values
-        first_week = values[:7] if len(values) >= 14 else values[:len(values)//2]
-
-        # Risk increases if spending, lending, and failures are trending up
-        lending_trend = last_week[:, 3].mean() - first_week[:, 3].mean()
-        failure_trend = last_week[:, 4].mean() - first_week[:, 4].mean()
-        spend_trend = (last_week[:, 0].mean() / max(first_week[:, 0].mean(), 1)) - 1
-
-        risk_score = lending_trend * 0.4 + failure_trend * 0.3 + max(spend_trend, 0) * 0.3
-        label = 1 if risk_score > 0.1 else 0
+        # Label from payment_events (outcome-based, not trend-based)
+        label = label_map.get(customer_id, 0)
 
         sequences.append(seq)
         labels.append(label)
@@ -212,7 +205,7 @@ def build_temporal_dataset(sequence_length: int = 30) -> tuple:
 
     print(f"[DatasetBuilder] Built temporal dataset: {X.shape[0]} sequences, "
           f"length={X.shape[1]}, features={X.shape[2]}")
-    print(f"  -> Positive: {int(y.sum())} ({y.mean()*100:.1f}%)")
+    print(f"  -> Positive (delinquent): {int(y.sum())} ({y.mean()*100:.1f}%)")
 
     return X, y, np.array(cust_ids)
 
@@ -225,4 +218,3 @@ if __name__ == "__main__":
 
     print("\nBuilding temporal dataset...")
     X_seq, y_seq, cids_seq = build_temporal_dataset()
-
