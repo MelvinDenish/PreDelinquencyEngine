@@ -7,7 +7,7 @@ redis==5.2.1
 kafka-python==2.0.3
 pydantic==2.10.4
 python-dotenv==1.0.1
-faker==33.1.0
+faker==40.11.1
 
 # ─────────────────────────────────────────────
 # ML Training - XGBoost, LightGBM, PyTorch, scikit-learn
