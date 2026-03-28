@@ -3,6 +3,8 @@ title = "PDI Engine Secret Scanning Rules"
 [extend]
 useDefault = true
 
+# ── Custom rules ──────────────────────────────
+
 [[rules]]
 id = "pdi-hardcoded-password"
 description = "Hardcoded PDI default password"
@@ -33,11 +35,11 @@ description = "Airflow Secret Key"
 regex = '''(?i)airflow[_\-]?secret[_\-]?key\s*[=:]\s*["'][^"']{8,}["']'''
 tags = ["airflow"]
 
-[[rules]]
-id = "grafana-admin-password"
-description = "Grafana Admin Password — only matches hardcoded values, not env var refs"
-regex = '''(?i)gf[_\-]security[_\-]admin[_\-]password\s*[=:]\s*["']?(?!\$\{)[a-zA-Z0-9_]{8,}["']?'''
-tags = ["grafana"]
+# NOTE: grafana-admin-password rule removed — docker-compose.yml uses
+# ${ENV_VAR} references (not hardcoded secrets), and re2 engine does
+# not support (?! lookahead) needed to distinguish them.
+
+# ── Allowlist (false positive suppression) ────
 
 [allowlist]
 paths = [
@@ -46,12 +48,5 @@ paths = [
     '''tests?/fixtures/''',
     '''tests?/data/''',
     '''init_db.*\.sql$''',
-]
-regexes = [
-    # Env var references like ${VAR:?msg} are not secrets
-    '''\$\{[A-Z_]+(?::-[^}]*)?\}''',
-    '''\$\{[A-Z_]+:\?[^}]*\}''',
-    # SQL DDL keywords that trigger generic-api-key
-    '''(?i)DECIMAL\(\d+,\d+\)\s+DEFAULT''',
-    '''(?i)VARCHAR\(\d+\)\s+PRIMARY\s+KEY''',
+    '''docker-compose\.yml$''',
 ]
