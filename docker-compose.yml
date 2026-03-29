@@ -182,9 +182,7 @@ services:
       - |
         apt-get update && apt-get install -y --no-install-recommends libpq-dev gcc && \
         pip install mlflow==2.11.0 psycopg2-binary && \
-        mlflow server --host 0.0.0.0 --port 5000 \
-          --backend-store-uri $MLFLOW_DB_URI \
-          --default-artifact-root /mlflow/artifacts
+        mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri postgresql://pdi_user:pdi_password@pdi-postgres:5432/mlflow_db
     depends_on:
       pdi-postgres:
         condition: service_healthy

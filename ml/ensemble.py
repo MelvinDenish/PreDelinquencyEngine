@@ -43,7 +43,7 @@ class EnsembleScorer:
         Default: XGBoost 0.35, LightGBM 0.40, TFT 0.25
         Falls back to fewer models if components are missing.
         """
-        self.xgb_weight = xgb_weight or ModelConfig.ENSEMBLE_XGB_WEIGHT
+        self.xgb_weight = xgb_weight or getattr(ModelConfig, 'ENSEMBLE_XGB_WEIGHT', 0.35)
         self.lgb_weight = lgb_weight or getattr(ModelConfig, 'ENSEMBLE_LGB_WEIGHT', 0.40)
         self.tft_weight = tft_weight or getattr(ModelConfig, 'ENSEMBLE_TFT_WEIGHT', 0.25)
 

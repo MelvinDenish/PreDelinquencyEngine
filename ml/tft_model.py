@@ -67,7 +67,7 @@ class GatedResidualNetwork(nn.Module):
         h = self.fc1(x)
         if self.context_fc is not None and context is not None:
             h = h + self.context_fc(context)
-        h = torch.elu(h)
+        h = torch.nn.functional.elu(h)
         h = self.fc2(h)
         h = self.dropout(h)
         # GLU (Gated Linear Unit)
