@@ -1,0 +1,14 @@
+---
+# Default deny-all: no pod in pdi-engine namespace can communicate unless
+# explicitly permitted by another NetworkPolicy.
+# This is the foundation — apply this first, then add allow policies.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: pdi-engine
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
