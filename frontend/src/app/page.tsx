@@ -16,7 +16,8 @@ import {
   AlertTriangle, CheckCircle, Wifi, WifiOff,
   ArrowRight, BarChart3, Lock, ChevronDown, ChevronUp,
   Phone, Clock, Target, ShieldAlert, Stethoscope, Briefcase,
-  TrendingDown, AlertCircle, Check,
+  TrendingDown, AlertCircle, Check, Play, FastForward, Eye,
+  Database, Cpu, Brain, MessageSquare, Send,
 } from "lucide-react";
 
 // ═══════════════════════════════════════════════
@@ -367,6 +368,7 @@ export default function Dashboard() {
     { key: "rm", label: "Relationship Manager", icon: <Users className="w-4 h-4" /> },
     { key: "customer", label: "Customer Service", icon: <Smartphone className="w-4 h-4" /> },
     { key: "godmode", label: "Operations Centre", icon: <Activity className="w-4 h-4" /> },
+    { key: "pipeline", label: "Pipeline Simulator", icon: <Play className="w-4 h-4" /> },
   ];
 
   return (
@@ -459,6 +461,15 @@ export default function Dashboard() {
             {activeView === "customer" && (
               <CustomerView serveResult={serveResult} triggerRealNotify={triggerRealNotify}
                 notifyResult={notifyResult} backendOnline={backendOnline} />
+            )}
+            {activeView === "pipeline" && (
+              <PipelineSimulatorView
+                setEvents={setEvents}
+                setScores={setScores}
+                setInterventions={setInterventions}
+                setCounters={setCounters}
+                setPipelineStage={setPipelineStage}
+              />
             )}
           </>
         )}
@@ -1418,3 +1429,588 @@ function CustomerView({ serveResult, triggerRealNotify, notifyResult, backendOnl
     </div>
   );
 }
+
+// ═══════════════════════════════════════════════
+// VIEW: PIPELINE SIMULATOR (Interactive Demo)
+// ═══════════════════════════════════════════════
+interface SimStage {
+  title: string;
+  icon: React.ReactNode;
+  nodes: string;
+  duration: string;
+  data: Record<string, unknown>;
+  outcome: string;
+}
+
+interface DemoCase {
+  id: string;
+  title: string;
+  subtitle: string;
+  customer: Customer;
+  color: string;
+  icon: React.ReactNode;
+  rawTxn: Record<string, unknown>;
+  featuresBefore: Record<string, string>;
+  featuresAfter: Record<string, string>;
+  batchFeatures: Record<string, string>;
+  modelScores: { xgb: number; lgb: number; tft: number; meta: number; tier: string };
+  shapDrivers: { feature: string; value: number; direction: string }[];
+  intervention: { channel: string; probability: string; script: string; offers: string[] };
+}
+
+function PipelineSimulatorView({ setEvents, setScores, setInterventions, setCounters, setPipelineStage }: {
+  setEvents: React.Dispatch<React.SetStateAction<EventItem[]>>;
+  setScores: React.Dispatch<React.SetStateAction<ScoreItem[]>>;
+  setInterventions: React.Dispatch<React.SetStateAction<InterventionItem[]>>;
+  setCounters: React.Dispatch<React.SetStateAction<{ txns: number; features: number; scores: number; interventions: number }>>;
+  setPipelineStage: React.Dispatch<React.SetStateAction<number>>;
+}) {
+  const [selectedCase, setSelectedCase] = useState<number>(0);
+  const [currentStage, setCurrentStage] = useState<number>(-1);
+  const [isRunning, setIsRunning] = useState(false);
+  const [completedStages, setCompletedStages] = useState<number[]>([]);
+  const timeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  const demoCases: DemoCase[] = [
+    {
+      id: "case1", title: "Gambling Debt Spiral", subtitle: "Gig worker with erratic income enters payday lending loop",
+      customer: CUSTOMERS.find(c => c.id === "CUST-3247")!,
+      color: "#F87171", icon: <AlertTriangle className="w-5 h-5" />,
+      rawTxn: {
+        event_id: "txn_89421", customer_id: "CUST-3247", customer_name: "Marcus Johnson",
+        merchant: "Coral Bookmakers", merchant_category: "gambling",
+        amount: 150.00, currency: "GBP", type: "card_present",
+        terminal_id: "POS_BHM_0842", city: "Birmingham",
+        timestamp: new Date().toISOString(),
+      },
+      featuresBefore: {
+        gambling_txns_7d: "£0", income_volatility_30d: "0.42",
+        cash_advance_count_30d: "2", min_balance_breaches: "3",
+        lending_app_txns_7d: "1", balance_velocity_7d: "-£280",
+      },
+      featuresAfter: {
+        gambling_txns_7d: "£150 ⬆", income_volatility_30d: "0.48 ⬆",
+        cash_advance_count_30d: "2", min_balance_breaches: "4 ⬆",
+        lending_app_txns_7d: "1", balance_velocity_7d: "-£430 ⬆",
+      },
+      batchFeatures: {
+        employer_health_score: "0.38 (Deliveroo plc)",
+        salary_delay_days: "3", dti_ratio: "0.72",
+        tenure_months: "18", credit_score: "545", segment: "Gig Worker",
+      },
+      modelScores: { xgb: 0.82, lgb: 0.91, tft: 0.78, meta: 0.88, tier: "CRITICAL" },
+      shapDrivers: [
+        { feature: "income_volatility_30d", value: 0.20, direction: "↑ risk" },
+        { feature: "gambling_txns_7d", value: 0.15, direction: "↑ risk" },
+        { feature: "cash_advance_count_30d", value: 0.13, direction: "↑ risk" },
+        { feature: "lending_app_txns_7d", value: 0.10, direction: "↑ risk" },
+        { feature: "tenure_months", value: -0.08, direction: "↓ risk" },
+      ],
+      intervention: {
+        channel: "📱 SMS", probability: "67%",
+        script: "Hi Marcus, this is Barclays. We noticed some financial pressure recently and have an income smoothing programme for flexible workers like yourself. Reply YES to learn more or call us free on 0800-BARCLAYS.",
+        offers: ["Income Smoothing Programme", "Micro-Loan Consolidation", "Financial Literacy Workshop"],
+      },
+    },
+    {
+      id: "case2", title: "Medical Emergency", subtitle: "Teacher hit by sudden medical costs, cascading into payday loans",
+      customer: CUSTOMERS.find(c => c.id === "CUST-1156")!,
+      color: "#F59E0B", icon: <Stethoscope className="w-5 h-5" />,
+      rawTxn: {
+        event_id: "txn_89422", customer_id: "CUST-1156", customer_name: "Emily Thompson",
+        merchant: "Bupa Health Clinic", merchant_category: "medical",
+        amount: 620.00, currency: "GBP", type: "card_present",
+        terminal_id: "POS_MAN_1204", city: "Manchester",
+        timestamp: new Date().toISOString(),
+      },
+      featuresBefore: {
+        medical_txns_30d: "£1,180", lending_app_txns_7d: "2",
+        cash_advance_count_30d: "1", salary_delay_days: "4",
+        min_balance_breaches: "5", balance_velocity_7d: "-£520",
+      },
+      featuresAfter: {
+        medical_txns_30d: "£1,800 ⬆", lending_app_txns_7d: "2",
+        cash_advance_count_30d: "1", salary_delay_days: "4",
+        min_balance_breaches: "6 ⬆", balance_velocity_7d: "-£1,140 ⬆",
+      },
+      batchFeatures: {
+        employer_health_score: "0.75 (Manchester Academy Trust)",
+        salary_delay_days: "4", dti_ratio: "0.81",
+        tenure_months: "36", credit_score: "583", segment: "Early Career",
+      },
+      modelScores: { xgb: 0.87, lgb: 0.84, tft: 0.92, meta: 0.91, tier: "CRITICAL" },
+      shapDrivers: [
+        { feature: "medical_txns_30d", value: 0.22, direction: "↑ risk" },
+        { feature: "lending_app_txns_7d", value: 0.16, direction: "↑ risk" },
+        { feature: "cash_advance_count_30d", value: 0.13, direction: "↑ risk" },
+        { feature: "salary_delay_days", value: 0.11, direction: "↑ risk" },
+        { feature: "tenure_months", value: -0.06, direction: "↓ risk" },
+      ],
+      intervention: {
+        channel: "📞 RM Phone Call", probability: "79%",
+        script: "Hi Emily, this is your Barclays support team. We can see there have been some significant medical expenses recently. You're pre-approved for our Medical Emergency Support programme with reduced rates at 4.5%. Can I help you get started right now?",
+        offers: ["Medical Emergency Loan @ 4.5%", "3-month Payment Moratorium", "Insurance Claim Support"],
+      },
+    },
+    {
+      id: "case3", title: "Employer Contagion", subtitle: "Stable employee now at-risk due to employer mass redundancies",
+      customer: CUSTOMERS.find(c => c.id === "CUST-4821")!,
+      color: "#8B5CF6", icon: <Briefcase className="w-5 h-5" />,
+      rawTxn: {
+        event_id: "txn_89423", customer_id: "CUST-4821", customer_name: "Sarah Mitchell",
+        merchant: "Tesco Express", merchant_category: "grocery",
+        amount: 42.50, currency: "GBP", type: "contactless",
+        terminal_id: "POS_LON_3301", city: "London",
+        timestamp: new Date().toISOString(),
+      },
+      featuresBefore: {
+        atm_withdrawals_7d: "£320", lending_app_txns_7d: "1",
+        discretionary_spend_7d: "£480", salary_delay_days: "6",
+        employer_health_score: "0.45", balance_velocity_7d: "-£190",
+      },
+      featuresAfter: {
+        atm_withdrawals_7d: "£320", lending_app_txns_7d: "1",
+        discretionary_spend_7d: "£522.50 ⬆", salary_delay_days: "6",
+        employer_health_score: "0.23 ⬇", balance_velocity_7d: "-£232.50 ⬆",
+      },
+      batchFeatures: {
+        employer_health_score: "0.23 (Thames Digital Group — CRITICAL)",
+        salary_delay_days: "6", dti_ratio: "0.58",
+        tenure_months: "24", credit_score: "621", segment: "Young Professional",
+      },
+      modelScores: { xgb: 0.78, lgb: 0.76, tft: 0.85, meta: 0.82, tier: "CRITICAL" },
+      shapDrivers: [
+        { feature: "atm_withdrawals_7d", value: 0.18, direction: "↑ risk" },
+        { feature: "employer_health_score", value: 0.15, direction: "↑ risk (contagion)" },
+        { feature: "lending_app_txns_7d", value: 0.14, direction: "↑ risk" },
+        { feature: "salary_delay_days", value: 0.07, direction: "↑ risk" },
+        { feature: "dti_ratio", value: -0.04, direction: "↓ risk" },
+      ],
+      intervention: {
+        channel: "💬 WhatsApp", probability: "73%",
+        script: "Hi Sarah, this is David from Barclays. I noticed some changes in your account recently — particularly some elevated ATM activity. We have a flexible 3-month payment holiday programme that could ease the pressure. Would you like me to walk you through it?",
+        offers: ["3-month Payment Holiday", "12-month Tenure Extension", "Debt Consolidation Loan @ 5.9%"],
+      },
+    },
+  ];
+
+  const activeCase = demoCases[selectedCase];
+
+  const getStages = useCallback((dc: DemoCase): SimStage[] => [
+    {
+      title: "Transaction Ingestion", icon: <Database className="w-4 h-4" />,
+      nodes: "CBS → Kafka → Flink", duration: "< 5ms",
+      data: dc.rawTxn,
+      outcome: `Raw transaction captured via Kafka. Flink identifies "${dc.rawTxn.merchant_category}" as ${["gambling", "lending_app", "payday_lender", "cash_advance"].includes(dc.rawTxn.merchant_category as string) ? "a high-stress" : "a standard"} category and begins window aggregation.`,
+    },
+    {
+      title: "Feature Engineering", icon: <Cpu className="w-4 h-4" />,
+      nodes: "Flink → Redis → Spark", duration: "12ms",
+      data: { realtime_before: dc.featuresBefore, realtime_after: dc.featuresAfter, batch_joined: dc.batchFeatures },
+      outcome: `Flink updates ${Object.keys(dc.featuresAfter).filter(k => dc.featuresAfter[k].includes("⬆") || dc.featuresAfter[k].includes("⬇")).length} real-time sliding window features in Redis. Spark appends ${Object.keys(dc.batchFeatures).length} historical batch features.`,
+    },
+    {
+      title: "Multi-Model Scoring", icon: <Brain className="w-4 h-4" />,
+      nodes: "ML Ensemble → Meta-Learner", duration: "18ms",
+      data: dc.modelScores,
+      outcome: `XGBoost: ${dc.modelScores.xgb.toFixed(2)} | LightGBM: ${dc.modelScores.lgb.toFixed(2)} | TFT: ${dc.modelScores.tft.toFixed(2)}. Meta-Learner final: ${dc.modelScores.meta.toFixed(2)} → ${dc.modelScores.tier}.`,
+    },
+    {
+      title: "SHAP Explainability", icon: <Eye className="w-4 h-4" />,
+      nodes: "SHAP Explainer", duration: "8ms",
+      data: { drivers: dc.shapDrivers },
+      outcome: `Top risk driver: "${dc.shapDrivers[0].feature}" contributing +${dc.shapDrivers[0].value.toFixed(2)} to the risk score. ${dc.shapDrivers.length} features explain 95% of prediction variance.`,
+    },
+    {
+      title: "GenAI & Dispatch", icon: <Send className="w-4 h-4" />,
+      nodes: "LinUCB → LLM → Dispatcher", duration: "4ms",
+      data: dc.intervention,
+      outcome: `LinUCB selects ${dc.intervention.channel} (${dc.intervention.probability} success). LLM generates empathy-first script. Dispatched to RM queue.`,
+    },
+  ], []);
+
+  const stages = getStages(activeCase);
+
+  // Inject data into global state at each stage
+  const advanceStage = useCallback((stageIdx: number) => {
+    const dc = demoCases[selectedCase];
+    const timeStr = new Date().toLocaleTimeString("en-GB", { hour12: false });
+    const evtId = Date.now() + stageIdx;
+
+    if (stageIdx === 0) {
+      setPipelineStage(1);
+      setEvents(prev => [{
+        id: evtId, time: timeStr, type: dc.rawTxn.type as string,
+        customer: dc.customer.name, customerId: dc.customer.id,
+        category: dc.rawTxn.merchant_category as string,
+        amount: dc.rawTxn.amount as number,
+        isStress: ["gambling", "lending_app", "payday_lender", "cash_advance"].includes(dc.rawTxn.merchant_category as string),
+      }, ...prev].slice(0, 50));
+      setCounters(prev => ({ ...prev, txns: prev.txns + 1 }));
+    } else if (stageIdx === 1) {
+      setPipelineStage(2);
+      setCounters(prev => ({ ...prev, features: prev.features + 28 }));
+    } else if (stageIdx === 2) {
+      setPipelineStage(3);
+      setScores(prev => [{
+        id: evtId, name: dc.customer.name, score: dc.modelScores.meta,
+        tier: dc.modelScores.tier.toLowerCase(), time: timeStr,
+        source: "live" as const,
+        xgb: dc.modelScores.xgb, lgb: dc.modelScores.lgb, lstm: dc.modelScores.tft,
+      }, ...prev].slice(0, 20));
+      setCounters(prev => ({ ...prev, scores: prev.scores + 1 }));
+    } else if (stageIdx === 3) {
+      // SHAP stage — no global injection needed (visual only)
+    } else if (stageIdx === 4) {
+      setPipelineStage(4);
+      setInterventions(prev => [{
+        id: evtId, name: dc.customer.name,
+        channel: dc.intervention.channel.replace(/[^\w\s]/g, "").trim(),
+        message: dc.intervention.script.substring(0, 80) + "...",
+        time: timeStr, source: "live" as const,
+      }, ...prev].slice(0, 20));
+      setCounters(prev => ({ ...prev, interventions: prev.interventions + 1 }));
+      setTimeout(() => setPipelineStage(0), 1500);
+    }
+
+    setCurrentStage(stageIdx);
+    setCompletedStages(prev => [...new Set([...prev, stageIdx])]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCase, setEvents, setScores, setInterventions, setCounters, setPipelineStage]);
+
+  // Auto-run all stages with delays
+  const runAllStages = useCallback(() => {
+    setIsRunning(true);
+    setCurrentStage(-1);
+    setCompletedStages([]);
+    // Clear any previous timeouts
+    timeoutsRef.current.forEach(t => clearTimeout(t));
+    timeoutsRef.current = [];
+
+    for (let i = 0; i < 5; i++) {
+      const t = setTimeout(() => {
+        advanceStage(i);
+        if (i === 4) {
+          setTimeout(() => setIsRunning(false), 1000);
+        }
+      }, i * 2000);
+      timeoutsRef.current.push(t);
+    }
+  }, [advanceStage]);
+
+  // Reset on case change
+  useEffect(() => {
+    setCurrentStage(-1);
+    setCompletedStages([]);
+    setIsRunning(false);
+    timeoutsRef.current.forEach(t => clearTimeout(t));
+  }, [selectedCase]);
+
+  return (
+    <div className="p-5 space-y-4" style={{ height: "calc(100vh - 56px)", overflowY: "auto" }}>
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-bold text-white flex items-center gap-2">
+            <Play className="w-5 h-5 text-cyan-400" />
+            End-to-End Pipeline Simulator
+          </h2>
+          <p className="text-xs text-slate-400 mt-0.5">
+            Interactive step-by-step demonstration — each stage injects live data into Operations Centre &amp; RM tabs
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={() => { setCurrentStage(-1); setCompletedStages([]); }}
+            className="px-3 py-1.5 text-xs font-medium rounded bg-white/[0.05] text-slate-300 border border-white/[0.1] hover:bg-white/[0.1] transition-all">
+            Reset
+          </button>
+          <button onClick={runAllStages} disabled={isRunning}
+            className="px-4 py-1.5 text-xs font-semibold rounded flex items-center gap-1.5 transition-all disabled:opacity-50"
+            style={{ background: "linear-gradient(135deg, #06B6D4, #3B82F6)", color: "#FFF" }}>
+            <FastForward className="w-3.5 h-3.5" />
+            {isRunning ? "Running..." : "Auto-Run All Stages"}
+          </button>
+        </div>
+      </div>
+
+      {/* Case Selector */}
+      <div className="grid grid-cols-3 gap-3">
+        {demoCases.map((dc, i) => (
+          <button key={dc.id} onClick={() => setSelectedCase(i)}
+            className="text-left p-4 rounded-lg border transition-all"
+            style={{
+              background: selectedCase === i ? `${dc.color}12` : "rgba(255,255,255,0.02)",
+              borderColor: selectedCase === i ? dc.color + "60" : "rgba(255,255,255,0.06)",
+            }}>
+            <div className="flex items-center gap-2 mb-1.5">
+              <span style={{ color: dc.color }}>{dc.icon}</span>
+              <span className="text-sm font-bold text-white">{dc.title}</span>
+            </div>
+            <p className="text-[11px] text-slate-400">{dc.subtitle}</p>
+            <div className="flex gap-1.5 mt-2">
+              <span className="text-[9px] px-1.5 py-0.5 rounded font-semibold" style={{ background: dc.color + "20", color: dc.color, border: `1px solid ${dc.color}40` }}>
+                {dc.customer.name}
+              </span>
+              <span className="text-[9px] px-1.5 py-0.5 rounded font-semibold bg-white/[0.05] text-slate-400">
+                {dc.customer.city}
+              </span>
+            </div>
+          </button>
+        ))}
+      </div>
+
+      {/* Pipeline Progress Bar */}
+      <div className="glass-panel p-4">
+        <div className="flex items-center gap-1">
+          {stages.map((s, i) => (
+            <div key={i} className="flex items-center flex-1">
+              <button onClick={() => !isRunning && advanceStage(i)} disabled={isRunning}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all w-full"
+                style={{
+                  background: currentStage === i ? "rgba(6,182,212,0.15)" : completedStages.includes(i) ? "rgba(52,211,153,0.1)" : "rgba(255,255,255,0.03)",
+                  border: `1px solid ${currentStage === i ? "#06B6D4" : completedStages.includes(i) ? "#34D39960" : "rgba(255,255,255,0.06)"}`,
+                  color: currentStage === i ? "#22D3EE" : completedStages.includes(i) ? "#34D399" : "#94A3B8",
+                  cursor: isRunning ? "default" : "pointer",
+                }}>
+                {completedStages.includes(i) && currentStage !== i ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : s.icon}
+                <span className="truncate">{s.title}</span>
+              </button>
+              {i < stages.length - 1 && <ArrowRight className="w-4 h-4 text-slate-600 mx-1 shrink-0" />}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Stage Detail Panel */}
+      {currentStage >= 0 && (
+        <div className="glass-panel p-5 animate-slide-in">
+          <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/[0.06]">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg flex items-center justify-center"
+                style={{ background: "rgba(6,182,212,0.15)", border: "1px solid rgba(6,182,212,0.3)" }}>
+                {stages[currentStage].icon}
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-white">Stage {currentStage + 1}: {stages[currentStage].title}</h3>
+                <p className="text-[10px] text-slate-400">{stages[currentStage].nodes} &nbsp;•&nbsp; Latency: {stages[currentStage].duration}</p>
+              </div>
+            </div>
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/25">
+              STAGE {currentStage + 1}/5
+            </span>
+          </div>
+
+          {/* Stage 1: Raw Transaction */}
+          {currentStage === 0 && (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <h4 className="text-[11px] uppercase tracking-wider text-slate-500 mb-2 font-semibold">Raw Transaction Payload (Kafka Topic)</h4>
+                <pre className="text-[11px] text-cyan-300 font-mono bg-black/40 rounded-lg p-4 overflow-x-auto border border-white/[0.06]">
+                  {JSON.stringify(activeCase.rawTxn, null, 2)}
+                </pre>
+              </div>
+              <div>
+                <h4 className="text-[11px] uppercase tracking-wider text-slate-500 mb-2 font-semibold">Pipeline Activity</h4>
+                <div className="space-y-2">
+                  {[
+                    { node: "CBS", status: "Transaction captured from Core Banking", color: "#34D399" },
+                    { node: "Kafka", status: `Published to topic: pdi.transactions.${(activeCase.rawTxn.city as string).toLowerCase()}`, color: "#22D3EE" },
+                    { node: "Flink", status: `Category "${activeCase.rawTxn.merchant_category}" classified. Window aggregation started.`, color: "#A78BFA" },
+                  ].map((n, i) => (
+                    <div key={i} className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-white/[0.03] border border-white/[0.06]">
+                      <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: n.color }} />
+                      <span className="text-xs font-bold text-slate-200 w-14">{n.node}</span>
+                      <span className="text-[11px] text-slate-400">{n.status}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Stage 2: Feature Engineering */}
+          {currentStage === 1 && (
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <h4 className="text-[11px] uppercase tracking-wider text-slate-500 mb-2 font-semibold">Before (Redis State)</h4>
+                <div className="space-y-1.5">
+                  {Object.entries(activeCase.featuresBefore).map(([k, v]) => (
+                    <div key={k} className="flex justify-between px-3 py-1.5 rounded bg-white/[0.03] text-xs">
+                      <span className="text-slate-400 font-mono">{k}</span>
+                      <span className="text-slate-200 font-mono">{v}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <h4 className="text-[11px] uppercase tracking-wider text-cyan-400 mb-2 font-semibold">After (Flink Updated) ⬆</h4>
+                <div className="space-y-1.5">
+                  {Object.entries(activeCase.featuresAfter).map(([k, v]) => (
+                    <div key={k} className="flex justify-between px-3 py-1.5 rounded text-xs"
+                      style={{ background: v.includes("⬆") || v.includes("⬇") ? "rgba(6,182,212,0.08)" : "rgba(255,255,255,0.03)" }}>
+                      <span className="text-slate-400 font-mono">{k}</span>
+                      <span className={`font-mono font-bold ${v.includes("⬆") || v.includes("⬇") ? "text-cyan-400" : "text-slate-200"}`}>{v}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <h4 className="text-[11px] uppercase tracking-wider text-violet-400 mb-2 font-semibold">Batch Features (Spark)</h4>
+                <div className="space-y-1.5">
+                  {Object.entries(activeCase.batchFeatures).map(([k, v]) => (
+                    <div key={k} className="flex justify-between px-3 py-1.5 rounded bg-violet-500/5 text-xs">
+                      <span className="text-slate-400 font-mono">{k}</span>
+                      <span className="text-violet-300 font-mono text-[11px]">{v}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Stage 3: Model Scoring */}
+          {currentStage === 2 && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-4 gap-3">
+                {[
+                  { name: "XGBoost", role: "Rule Enforcer", score: activeCase.modelScores.xgb, color: "#34D399" },
+                  { name: "LightGBM", role: "Sparse-Data Specialist", score: activeCase.modelScores.lgb, color: "#22D3EE" },
+                  { name: "TFT", role: "Trajectory Forecaster", score: activeCase.modelScores.tft, color: "#A78BFA" },
+                  { name: "Meta-Learner", role: "Final Verdict", score: activeCase.modelScores.meta, color: "#F87171" },
+                ].map((m, i) => (
+                  <div key={i} className="p-4 rounded-lg border border-white/[0.08] text-center"
+                    style={{ background: i === 3 ? "rgba(248,113,113,0.08)" : "rgba(255,255,255,0.02)" }}>
+                    <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">{m.name}</div>
+                    <div className="text-2xl font-bold font-mono" style={{ color: m.color }}>{m.score.toFixed(2)}</div>
+                    <div className="text-[10px] text-slate-400 mt-1">{m.role}</div>
+                    {i === 3 && (
+                      <span className="inline-block mt-2 text-[10px] font-bold px-2 py-0.5 rounded bg-red-500/15 text-red-400 border border-red-500/30">
+                        {activeCase.modelScores.tier}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div className="p-3 rounded-lg bg-white/[0.03] border border-white/[0.06]">
+                <div className="text-[10px] text-slate-400">
+                  <strong className="text-slate-200">Meta-Learner Input Vector:</strong> [{activeCase.modelScores.xgb.toFixed(2)}, {activeCase.modelScores.lgb.toFixed(2)}, {activeCase.modelScores.tft.toFixed(2)}, σ²={((activeCase.modelScores.lgb - activeCase.modelScores.xgb) ** 2).toFixed(4)}, range={Math.abs(activeCase.modelScores.lgb - activeCase.modelScores.xgb).toFixed(2)}, calibrated=true]
+                  → <strong className="text-red-400">Output: {activeCase.modelScores.meta.toFixed(2)} ({activeCase.modelScores.tier})</strong>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Stage 4: SHAP */}
+          {currentStage === 3 && (
+            <div>
+              <h4 className="text-[11px] uppercase tracking-wider text-slate-500 mb-3 font-semibold">SHAP Feature Attribution Breakdown</h4>
+              <div className="space-y-2.5">
+                {activeCase.shapDrivers.map((d, i) => (
+                  <div key={i} className="flex items-center gap-3">
+                    <span className="w-48 text-xs text-slate-300 font-mono">{d.feature}</span>
+                    <div className="flex-1 h-4 bg-white/[0.04] rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full transition-all duration-1000 ${d.value >= 0 ? "bg-gradient-to-r from-red-500/60 to-red-400" : "bg-gradient-to-r from-cyan-500/60 to-cyan-400"}`}
+                        style={{ width: `${Math.abs(d.value) * 400}%` }} />
+                    </div>
+                    <span className={`text-xs font-bold font-mono w-16 text-right ${d.value >= 0 ? "text-red-400" : "text-cyan-400"}`}>
+                      {d.value >= 0 ? "+" : ""}{d.value.toFixed(2)}
+                    </span>
+                    <span className="text-[10px] text-slate-500 w-28">{d.direction}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 p-3 rounded-lg bg-amber-500/8 border border-amber-500/20">
+                <p className="text-xs text-amber-300">
+                  <strong>Explainability:</strong> Top 3 features ({activeCase.shapDrivers.slice(0, 3).map(d => d.feature).join(", ")}) contribute {(activeCase.shapDrivers.slice(0, 3).reduce((a, d) => a + Math.abs(d.value), 0) * 100 / activeCase.shapDrivers.reduce((a, d) => a + Math.abs(d.value), 0)).toFixed(0)}% of total risk attribution.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Stage 5: Intervention */}
+          {currentStage === 4 && (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <h4 className="text-[11px] uppercase tracking-wider text-slate-500 mb-2 font-semibold">LinUCB Bandit Decision</h4>
+                <div className="p-4 rounded-lg bg-white/[0.03] border border-white/[0.06] space-y-3">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-400">Selected Channel</span>
+                    <span className="text-white font-bold">{activeCase.intervention.channel}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-400">Predicted Success</span>
+                    <span className="text-emerald-400 font-bold">{activeCase.intervention.probability}</span>
+                  </div>
+                  <div className="border-t border-white/[0.06] pt-3">
+                    <div className="text-[10px] text-slate-500 mb-2 font-semibold uppercase">Pre-Approved Offers</div>
+                    {activeCase.intervention.offers.map((o, i) => (
+                      <div key={i} className="flex items-center gap-2 text-xs text-slate-300 mb-1">
+                        <Check className="w-3 h-3 text-emerald-400" /> {o}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div>
+                <h4 className="text-[11px] uppercase tracking-wider text-slate-500 mb-2 font-semibold">LLM-Generated Script</h4>
+                <div className="p-4 rounded-lg border border-emerald-500/20 space-y-3" style={{ background: "rgba(52,211,153,0.05)" }}>
+                  <p className="text-xs text-slate-200 leading-relaxed italic">
+                    &ldquo;{activeCase.intervention.script}&rdquo;
+                  </p>
+                  <div className="flex gap-2">
+                    <span className="text-[9px] px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-semibold">EMPATHY-FIRST</span>
+                    <span className="text-[9px] px-2 py-0.5 rounded bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 font-semibold">SHAP-PERSONALISED</span>
+                    <span className="text-[9px] px-2 py-0.5 rounded bg-violet-500/15 text-violet-400 border border-violet-500/30 font-semibold">FCA COMPLIANT</span>
+                  </div>
+                </div>
+                <div className="mt-3 p-3 rounded-lg bg-cyan-500/8 border border-cyan-500/20">
+                  <p className="text-[11px] text-cyan-300">
+                    ✓ <strong>Dispatched</strong> — Check <strong>Operations Centre</strong> for live event stream &amp; <strong>Relationship Manager</strong> for updated queue.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Outcome */}
+          <div className="mt-4 p-3 rounded-lg bg-white/[0.03] border border-white/[0.06]">
+            <p className="text-xs text-slate-300">
+              <strong className="text-cyan-400">Outcome:</strong> {stages[currentStage].outcome}
+            </p>
+          </div>
+
+          {/* Navigation */}
+          <div className="flex justify-between mt-4">
+            <button onClick={() => !isRunning && currentStage > 0 && advanceStage(currentStage - 1)}
+              disabled={isRunning || currentStage <= 0}
+              className="px-3 py-1.5 text-xs font-medium rounded bg-white/[0.05] text-slate-300 border border-white/[0.1] hover:bg-white/[0.1] transition-all disabled:opacity-30">
+              ← Previous Stage
+            </button>
+            <button onClick={() => !isRunning && currentStage < 4 && advanceStage(currentStage + 1)}
+              disabled={isRunning || currentStage >= 4}
+              className="px-4 py-1.5 text-xs font-semibold rounded flex items-center gap-1.5 transition-all disabled:opacity-30"
+              style={{ background: "linear-gradient(135deg, #06B6D4, #3B82F6)", color: "#FFF" }}>
+              Next Stage →
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Prompt to start */}
+      {currentStage < 0 && (
+        <div className="glass-panel p-8 text-center">
+          <div className="w-16 h-16 mx-auto rounded-2xl flex items-center justify-center mb-4"
+            style={{ background: "rgba(6,182,212,0.1)", border: "1px solid rgba(6,182,212,0.2)" }}>
+            <Play className="w-8 h-8 text-cyan-400" />
+          </div>
+          <h3 className="text-lg font-bold text-white mb-2">Select a Case &amp; Begin</h3>
+          <p className="text-sm text-slate-400 max-w-lg mx-auto">
+            Choose one of the 3 edge cases above, then click <strong className="text-cyan-400">Auto-Run All Stages</strong> to watch the entire pipeline execute,
+            or click individual stages to step through manually. Each stage injects live data into the <strong className="text-white">Operations Centre</strong> and <strong className="text-white">Relationship Manager</strong> tabs.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
