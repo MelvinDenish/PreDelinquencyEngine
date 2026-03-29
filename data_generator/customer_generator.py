@@ -46,7 +46,7 @@ STATES_BY_CITY = {
     "Raipur": "Chhattisgarh", "Jabalpur": "Madhya Pradesh", "Varanasi": "Uttar Pradesh",
 }
 
-# RBI-aligned income brackets (monthly, INR)
+# Income brackets (monthly)
 INCOME_BRACKETS = [
     ("ews",          10000,  20000),    # Economically Weaker Section
     ("low",          20000,  35000),    # Lower income

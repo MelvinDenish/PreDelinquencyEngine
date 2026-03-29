@@ -232,7 +232,7 @@ add_tech(
     "Alternatives: Random Forest (less accurate, no gradient boosting), "
     "CatBoost (good but less SHAP support), Neural Networks (black-box, hard to explain to regulators), "
     "Logistic Regression (too simple for complex feature interactions). "
-    "XGBoost + SHAP gives us both accuracy AND explainability — critical for RBI compliance.",
+    "XGBoost + SHAP gives us both accuracy AND explainability — critical for FCA/PRA regulatory compliance.",
     
     "XGBoost as a committee of experts:\n"
     "• 300 experts (decision trees) are trained sequentially\n"
@@ -350,7 +350,7 @@ add_tech(
 add_tech(
     "23.8 SHAP (SHapley Additive exPlanations)",
     
-    "SHAP is mandatory in banking ML for regulatory compliance (RBI, GDPR Article 22):\n"
+    "SHAP is mandatory in banking ML for regulatory compliance (FCA, PRA, GDPR Article 22):\n"
     "• Provides mathematically rigorous explanations for every individual prediction\n"
     "• TreeSHAP is exact (not approximate) for tree models — polynomial time\n"
     "• Drives our intervention routing — the TOP SHAP feature determines what TYPE of help to offer\n"

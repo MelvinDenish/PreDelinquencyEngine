@@ -236,7 +236,7 @@ cust_features = [
     "9 employment types: salaried_private, salaried_govt, self_employed, professional, "
     "business_owner, contract_worker, gig_worker, freelancer, retired",
     "Industry sectors mapped to employment (IT/ITES, BFSI, Manufacturing, Healthcare, etc.)",
-    "7 RBI-aligned income brackets: EWS (₹10K–20K) to Ultra HNI (₹5L–20L)",
+    "7 income brackets: EWS to Ultra HNI",
     "12 life events as stress triggers: job_loss, medical_emergency, salary_cut, "
     "divorce, business_failure, wedding_expense, etc.",
     "DTI (Debt-to-Income) ratio calculated from actual product holdings",

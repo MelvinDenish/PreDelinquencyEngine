@@ -1,0 +1,44 @@
+---
+# Istio mTLS: enforce mutual TLS for ALL service-to-service communication
+# within the pdi-engine namespace. No plaintext internal traffic allowed.
+# Requires Istio to be installed in the cluster.
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default-mtls-strict
+  namespace: pdi-engine
+spec:
+  mtls:
+    mode: STRICT
+
+---
+# AuthorizationPolicy: deny all by default, then selectively allow
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: deny-all-default
+  namespace: pdi-engine
+spec:
+  {}
+  # Empty spec = deny all. Add specific ALLOW policies per service.
+
+---
+# AuthorizationPolicy: Allow ingress controller to reach scoring service
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-ingress-to-scoring
+  namespace: pdi-engine
+spec:
+  selector:
+    matchLabels:
+      app: pdi-scoring
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            namespaces: ["ingress-nginx"]
+      to:
+        - operation:
+            methods: ["GET", "POST"]
+            paths: ["/health", "/score", "/score/*", "/notify", "/explain/*", "/auth/token", "/docs", "/redoc", "/openapi.json"]

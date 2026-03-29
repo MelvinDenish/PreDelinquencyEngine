@@ -79,7 +79,7 @@ class BankProfile:
 
     # Regulatory flags
     regulatory_flags: Dict[str, object] = field(default_factory=lambda: {
-        "rbi_fair_practice": True,
+        "fca_fair_practice": True,
         "cooldown_hours": 24,
         "max_sms_per_day": 3,
         "max_rm_calls_per_week": 2,
