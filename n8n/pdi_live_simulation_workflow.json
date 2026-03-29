@@ -1,0 +1,244 @@
+{
+  "name": "PDI — Complete Live Pipeline Simulation",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "seconds", "secondsInterval": 10 }] }
+      },
+      "id": "trigger-schedule",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const CUSTOMER_POOL = [\n  { id: 'CUST_CRITICAL_001', name: 'Vikram Singh',   city: 'Jaipur',     region: 'North', salary: 28000,  segment: 'gig_worker',    creditScore: 520 },\n  { id: 'CUST_CRITICAL_002', name: 'Anjali Gupta',   city: 'Lucknow',    region: 'North', salary: 24000,  segment: 'gig_worker',    creditScore: 545 },\n  { id: 'CUST_CRITICAL_003', name: 'Ravi Shankar',   city: 'Patna',      region: 'East',  salary: 22000,  segment: 'farmer',        creditScore: 498 },\n  { id: 'CUST_WATCH_001',    name: 'Karthik Reddy',  city: 'Hyderabad',  region: 'South', salary: 48000,  segment: 'salaried',      creditScore: 634 },\n  { id: 'CUST_WATCH_002',    name: 'Deepa Menon',    city: 'Kochi',      region: 'South', salary: 42000,  segment: 'self_employed', creditScore: 648 },\n  { id: 'CUST_WATCH_003',    name: 'Priya Sharma',   city: 'Mumbai',     region: 'West',  salary: 55000,  segment: 'salaried',      creditScore: 671 },\n  { id: 'CUST_STRESSED_001', name: 'Rahul Verma',    city: 'Delhi',      region: 'North', salary: 40000,  segment: 'gig_worker',    creditScore: 603 },\n  { id: 'CUST_STABLE_001',   name: 'Arjun Nair',     city: 'Bangalore',  region: 'South', salary: 120000, segment: 'salaried',      creditScore: 764 },\n  { id: 'CUST_STABLE_002',   name: 'Meera Iyer',     city: 'Chennai',    region: 'South', salary: 65000,  segment: 'salaried',      creditScore: 742 },\n  { id: 'CUST_STABLE_003',   name: 'Rohit Desai',    city: 'Pune',       region: 'West',  salary: 95000,  segment: 'salaried',      creditScore: 788 }\n];\n\nconst stressTxnTypes = ['lending_app', 'atm_withdrawal', 'cash_advance', 'payday_lender'];\nconst normalTxnTypes = ['upi_debit', 'pos_purchase', 'online_transfer', 'emi_payment'];\nconst stressCats = ['lending_app', 'gambling', 'payday_lender', 'cash_advance'];\n\nconst cust = CUSTOMER_POOL[Math.floor(Math.random() * CUSTOMER_POOL.length)];\nconst isCritical = cust.id.includes('CRITICAL');\nconst isWatch = cust.id.includes('WATCH') || cust.id.includes('STRESSED');\n\nconst txnType = isCritical\n  ? stressTxnTypes[Math.floor(Math.random() * stressTxnTypes.length)]\n  : isWatch\n    ? (Math.random() > 0.5 ? stressTxnTypes[Math.floor(Math.random() * stressTxnTypes.length)] : normalTxnTypes[Math.floor(Math.random() * normalTxnTypes.length)])\n    : normalTxnTypes[Math.floor(Math.random() * normalTxnTypes.length)];\n\nconst merchantCat = isCritical\n  ? stressCats[Math.floor(Math.random() * stressCats.length)]\n  : isWatch\n    ? (Math.random() > 0.4 ? stressCats[Math.floor(Math.random() * stressCats.length)] : 'groceries')\n    : ['groceries', 'fuel', 'dining', 'entertainment'][Math.floor(Math.random() * 4)];\n\nconst amount = isCritical ? Math.floor(Math.random() * 15000) + 2000 : isWatch ? Math.floor(Math.random() * 8000) + 500 : Math.floor(Math.random() * 3000) + 100;\nconst txnStatus = isCritical && Math.random() > 0.6 ? 'failed' : 'success';\n\nconst txn = {\n  txn_id: 'TXN_' + Date.now() + '_' + Math.floor(Math.random() * 10000),\n  customer_id: cust.id,\n  customer_name: cust.name,\n  city: cust.city,\n  region: cust.region,\n  segment: cust.segment,\n  monthly_salary: cust.salary,\n  credit_score: cust.creditScore,\n  txn_type: txnType,\n  merchant_category: merchantCat,\n  amount: amount,\n  txn_status: txnStatus,\n  is_stress_signal: stressCats.includes(merchantCat) || txnStatus === 'failed',\n  channel: ['mobile_app', 'web', 'branch', 'atm'][Math.floor(Math.random() * 4)],\n  ingested_at: new Date().toISOString(),\n  failed_autodebits_count_30d: isCritical ? Math.floor(Math.random()*5)+3 : isWatch ? Math.floor(Math.random()*3)+1 : 0,\n  lending_app_txn_count_30d: isCritical ? Math.floor(Math.random()*6)+4 : isWatch ? Math.floor(Math.random()*3)+1 : 0,\n  salary_delay_days: isCritical ? Math.floor(Math.random()*18)+5 : isWatch ? Math.floor(Math.random()*8) : 0,\n  savings_balance_pct_change_7d: isCritical ? -(Math.random()*0.45+0.3) : isWatch ? -(Math.random()*0.2) : Math.random()*0.1,\n  discretionary_spend_trend: isCritical ? 1.9+Math.random()*0.4 : isWatch ? 1.3+Math.random()*0.3 : 0.8+Math.random()*0.2,\n  dti_ratio: isCritical ? 0.58+Math.random()*0.2 : isWatch ? 0.38+Math.random()*0.15 : 0.18+Math.random()*0.12,\n  night_txn_ratio: isCritical ? 0.32+Math.random()*0.18 : Math.random()*0.12,\n  atm_withdrawal_count_7d: isCritical ? Math.floor(Math.random()*8)+4 : isWatch ? Math.floor(Math.random()*4)+1 : Math.floor(Math.random()*2),\n  pipeline_ts: Date.now(),\n  source: 'CBS_SIMULATION'\n};\n\nconsole.log('[INGEST] ' + txn.txn_id + ' | ' + cust.name + ' | ' + txnType + ' | amt=' + amount);\nreturn [{ json: txn }];"
+      },
+      "id": "cbs-ingest",
+      "name": "CBS Ingestion Layer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://pdi-app:8000/auth/token",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            { "name": "username", "value": "admin" },
+            { "name": "password", "value": "ChangeMe@2024!" }
+          ]
+        },
+        "options": { "timeout": 8000 }
+      },
+      "id": "get-auth-token",
+      "name": "Get Auth Token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [480, 300],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const txn = $('CBS Ingestion Layer').first().json;\nconst auth = $input.first().json;\nconst token = auth.access_token || '';\nconsole.log('[AUTH] Token: ' + (token ? 'OK' : 'MISSING - will use heuristic'));\nreturn [{ json: { ...txn, _bearer_token: token } }];"
+      },
+      "id": "attach-token",
+      "name": "Attach Auth Token",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://pdi-app:8000/score",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "={{ 'Bearer ' + $json._bearer_token }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ customer_id: $json.customer_id }) }}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "ml-score",
+      "name": "ML Ensemble Scoring",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [960, 300],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const txn = $('Attach Auth Token').first().json;\nconst scoreRaw = $input.first().json;\n\nlet risk_score, risk_tier, xgboost_score, lightgbm_score, tft_score, ensemble_score,\n    top_shap_features, product_actions, tte_days, calibrated_pd, uplift_score,\n    confidence_flag, meta_learner_used, scored_at, ml_api_used;\n\nif (scoreRaw && scoreRaw.risk_score !== undefined) {\n  // Real ML API response\n  risk_score = scoreRaw.risk_score;\n  risk_tier = scoreRaw.risk_tier;\n  xgboost_score = scoreRaw.xgboost_score;\n  lightgbm_score = scoreRaw.lightgbm_score;\n  tft_score = scoreRaw.tft_score;\n  ensemble_score = scoreRaw.ensemble_score || risk_score;\n  top_shap_features = scoreRaw.top_shap_features || [];\n  product_actions = scoreRaw.product_actions || [];\n  tte_days = scoreRaw.tte_days;\n  calibrated_pd = scoreRaw.calibrated_pd || null;\n  uplift_score = scoreRaw.uplift_score || null;\n  confidence_flag = scoreRaw.confidence_flag || 'green';\n  meta_learner_used = scoreRaw.meta_learner_used || false;\n  scored_at = scoreRaw.scored_at || new Date().toISOString();\n  ml_api_used = true;\n} else {\n  // Heuristic fallback\n  const isCritical = txn.customer_id.includes('CRITICAL');\n  const isWatch = txn.customer_id.includes('WATCH') || txn.customer_id.includes('STRESSED');\n  risk_score = isCritical ? 0.72 + Math.random()*0.2 : isWatch ? 0.42 + Math.random()*0.2 : 0.1 + Math.random()*0.2;\n  risk_tier = risk_score > 0.65 ? 'critical' : risk_score > 0.35 ? 'watch' : 'stable';\n  xgboost_score = risk_score + (Math.random()*0.06-0.03);\n  lightgbm_score = risk_score + (Math.random()*0.06-0.03);\n  tft_score = null;\n  ensemble_score = risk_score;\n  top_shap_features = [\n    { feature: 'dti_ratio', value: txn.dti_ratio },\n    { feature: 'credit_score', value: -0.3 },\n    { feature: 'failed_autodebits', value: txn.failed_autodebits_count_30d * 0.1 }\n  ];\n  product_actions = risk_score > 0.65\n    ? ['suspend_new_credit', 'escalate_to_rm', 'send_financial_counseling']\n    : risk_score > 0.35\n      ? ['flag_for_review', 'reduce_credit_limit', 'send_payment_reminder']\n      : ['monitor_passively'];\n  tte_days = risk_score > 0.65 ? Math.floor(Math.random()*15)+5 : risk_score > 0.35 ? Math.floor(Math.random()*45)+15 : null;\n  calibrated_pd = risk_score * 0.9;\n  uplift_score = null;\n  confidence_flag = 'yellow';\n  meta_learner_used = false;\n  scored_at = new Date().toISOString();\n  ml_api_used = false;\n}\n\nconst tierIcon = { critical: '\\uD83D\\uDD34', watch: '\\uD83D\\uDFE1', stable: '\\uD83D\\uDFE2' }[risk_tier] || '\\u26AA';\nconsole.log('[SCORE] ' + txn.customer_name + ' | ' + tierIcon + ' ' + risk_tier.toUpperCase() + ' | score=' + risk_score.toFixed(3) + ' | ml=' + ml_api_used);\n\nreturn [{ json: {\n  ...txn,\n  risk_score, risk_tier, xgboost_score, lightgbm_score, tft_score, ensemble_score,\n  top_shap_features, product_actions, tte_days, calibrated_pd, uplift_score,\n  confidence_flag, meta_learner_used, scored_at, ml_api_used\n} }];"
+      },
+      "id": "process-score",
+      "name": "Process Score Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "cond-actionable",
+              "leftValue": "={{ $json.risk_tier }}",
+              "rightValue": "stable",
+              "operator": { "type": "string", "operation": "notEquals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-actionable",
+      "name": "Is Actionable?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1440, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://pdi-app:8000/notify",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "={{ 'Bearer ' + $json._bearer_token }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ customer_id: $json.customer_id, customer_name: $json.customer_name, risk_score: $json.risk_score, risk_tier: $json.risk_tier, alert_message: $json.risk_tier === 'critical' ? 'URGENT: Your account shows critical stress signals. Immediate action required.' : 'Important: Your account shows elevated risk. Please review your finances.', city: $json.city, salary: $json.monthly_salary }) }}",
+        "options": { "timeout": 12000 }
+      },
+      "id": "dispatch-notify",
+      "name": "Dispatch Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1680, 180],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Stable — no notification needed\nconst d = $input.first().json;\nconsole.log('[STABLE] ' + d.customer_name + ' — no action needed (score=' + d.risk_score.toFixed(3) + ')');\nreturn [{ json: { ...d, notify_status: 'no_action', channels_sent: 'none', channels_count: 0, notify_results: [] } }];"
+      },
+      "id": "stable-no-action",
+      "name": "Stable No Action",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1680, 420]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $('Process Score Result').first().json;\nconst notifyRaw = $input.first().json;\n\nlet notify_status, channels_sent, channels_count, notify_results;\n\nif (notifyRaw && notifyRaw.status === 'dispatched') {\n  notify_status = 'dispatched';\n  channels_count = notifyRaw.channels_attempted || 0;\n  notify_results = notifyRaw.results || [];\n  channels_sent = notify_results.filter(r => r.status === 'sent').map(r => r.channel).join('+') || 'attempted';\n} else {\n  notify_status = 'dispatch_error';\n  channels_sent = 'error';\n  channels_count = 0;\n  notify_results = [];\n}\n\nconsole.log('[NOTIFY] ' + d.customer_name + ' | status=' + notify_status + ' | via=' + channels_sent);\nreturn [{ json: { ...d, notify_status, channels_sent, channels_count, notify_results } }];"
+      },
+      "id": "process-notify",
+      "name": "Process Notification Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1920, 180]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst tierIcon = { critical: '\\uD83D\\uDD34', watch: '\\uD83D\\uDFE1', stable: '\\uD83D\\uDFE2' }[d.risk_tier] || '\\u26AA';\nconst mlLabel = d.ml_api_used ? 'Real ML API' : 'Heuristic Fallback';\nconst pipelineMs = Date.now() - (d.pipeline_ts || Date.now());\n\nconst summary = {\n  event_id: 'EVT_' + Date.now() + '_' + Math.floor(Math.random()*9999),\n  event_time: new Date().toISOString(),\n  pipeline_run_ms: pipelineMs,\n  customer_id: d.customer_id,\n  customer_name: d.customer_name,\n  city: d.city,\n  region: d.region,\n  segment: d.segment,\n  credit_score: d.credit_score,\n  monthly_salary: d.monthly_salary,\n  txn_id: d.txn_id,\n  txn_type: d.txn_type,\n  merchant_category: d.merchant_category,\n  amount: d.amount,\n  is_stress_signal: d.is_stress_signal,\n  risk_score: d.risk_score,\n  risk_tier: d.risk_tier,\n  risk_tier_icon: tierIcon,\n  xgboost_score: d.xgboost_score,\n  lightgbm_score: d.lightgbm_score,\n  tft_score: d.tft_score,\n  ensemble_score: d.ensemble_score,\n  calibrated_pd: d.calibrated_pd,\n  tte_days: d.tte_days,\n  uplift_score: d.uplift_score,\n  confidence_flag: d.confidence_flag,\n  meta_learner_used: d.meta_learner_used,\n  top_shap_features: d.top_shap_features,\n  product_actions: d.product_actions,\n  ml_source: mlLabel,\n  intervention_type: d.risk_tier === 'stable' ? 'none' : d.risk_tier === 'watch' ? 'preventive_outreach' : 'urgent_intervention',\n  notify_status: d.notify_status,\n  channels_sent: d.channels_sent,\n  channels_count: d.channels_count,\n  notify_results: d.notify_results || [],\n  stages: [\n    { stage: 'ingestion',    ts: d.ingested_at,  status: 'ok',                                  label: 'CBS Ingested' },\n    { stage: 'auth',         ts: d.ingested_at,  status: 'ok',                                  label: 'JWT Auth Token Obtained' },\n    { stage: 'ml_scoring',   ts: d.scored_at,    status: d.ml_api_used ? 'live' : 'fallback',   label: 'ML Scored (' + mlLabel + ')' },\n    { stage: 'risk_routing', ts: d.scored_at,    status: 'ok',                                  label: 'Routed to ' + d.risk_tier.toUpperCase() },\n    { stage: 'notification', ts: new Date().toISOString(), status: d.notify_status === 'no_action' ? 'skipped' : 'ok', label: d.notify_status === 'no_action' ? 'No Action (Stable)' : 'Notified via ' + d.channels_sent },\n    { stage: 'complete',     ts: new Date().toISOString(), status: 'ok',                        label: 'Pipeline Complete (' + pipelineMs + 'ms)' }\n  ]\n};\n\nconsole.log('[PIPELINE] ' + d.customer_name + ' | ' + tierIcon + ' ' + d.risk_tier.toUpperCase() + ' | score=' + d.risk_score.toFixed(3) + ' | ml=' + mlLabel + ' | run=' + pipelineMs + 'ms');\nreturn [{ json: summary }];"
+      },
+      "id": "build-summary",
+      "name": "Build Pipeline Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2160, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:3001/api/workflow-event",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-PDI-Secret", "value": "pdi-n8n-webhook-secret" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": { "timeout": 10000 }
+      },
+      "id": "push-frontend",
+      "name": "Push to Frontend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [2400, 300],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $('Build Pipeline Summary').first().json;\nconsole.log('[COMPLETE] event=' + d.event_id + ' | ' + d.customer_name + ' | ' + d.risk_tier.toUpperCase() + ' | score=' + d.risk_score.toFixed(3) + ' | pipeline=' + d.pipeline_run_ms + 'ms');\nreturn [{ json: { status: 'pipeline_complete', event_id: d.event_id, customer_name: d.customer_name, risk_tier: d.risk_tier, risk_score: d.risk_score, pipeline_run_ms: d.pipeline_run_ms } }];"
+      },
+      "id": "final-log",
+      "name": "Final Pipeline Log",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2640, 300]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [[{ "node": "CBS Ingestion Layer", "type": "main", "index": 0 }]]
+    },
+    "CBS Ingestion Layer": {
+      "main": [[{ "node": "Get Auth Token", "type": "main", "index": 0 }]]
+    },
+    "Get Auth Token": {
+      "main": [[{ "node": "Attach Auth Token", "type": "main", "index": 0 }]]
+    },
+    "Attach Auth Token": {
+      "main": [[{ "node": "ML Ensemble Scoring", "type": "main", "index": 0 }]]
+    },
+    "ML Ensemble Scoring": {
+      "main": [[{ "node": "Process Score Result", "type": "main", "index": 0 }]]
+    },
+    "Process Score Result": {
+      "main": [[{ "node": "Is Actionable?", "type": "main", "index": 0 }]]
+    },
+    "Is Actionable?": {
+      "main": [
+        [{ "node": "Dispatch Notification", "type": "main", "index": 0 }],
+        [{ "node": "Stable No Action",      "type": "main", "index": 0 }]
+      ]
+    },
+    "Dispatch Notification": {
+      "main": [[{ "node": "Process Notification Result", "type": "main", "index": 0 }]]
+    },
+    "Process Notification Result": {
+      "main": [[{ "node": "Build Pipeline Summary", "type": "main", "index": 0 }]]
+    },
+    "Stable No Action": {
+      "main": [[{ "node": "Build Pipeline Summary", "type": "main", "index": 0 }]]
+    },
+    "Build Pipeline Summary": {
+      "main": [[{ "node": "Push to Frontend", "type": "main", "index": 0 }]]
+    },
+    "Push to Frontend": {
+      "main": [[{ "node": "Final Pipeline Log", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "meta": { "templateCredsSetupCompleted": true }
+}
