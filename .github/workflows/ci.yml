@@ -105,8 +105,61 @@ jobs:
       - name: Install safety
         run: pip install safety bandit
 
-      - name: Check dependencies for vulnerabilities
-        run: safety check -r requirements.txt || true
+      - name: Check dependencies for vulnerabilities (BLOCKING)
+        run: |
+          pip install safety
+          safety check -r requirements.txt
 
-      - name: Run Bandit security linter
-        run: bandit -r . -x ./tests --severity-level medium || true
+      - name: Run Bandit security linter (BLOCKING on HIGH severity)
+        run: |
+          pip install bandit
+          bandit -r . -x ./tests --severity-level high --confidence-level high \
+            -f json -o bandit-report.json || true
+          # Fail build on HIGH severity findings
+          bandit -r . -x ./tests --severity-level high --confidence-level high
+
+      - name: Upload Bandit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-security-report
+          path: bandit-report.json
+
+      - name: Scan for hardcoded secrets (Gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check for secrets in docker-compose (custom check)
+        run: |
+          # Fail if docker-compose.yml contains any hardcoded passwords
+          if grep -E '(password|PASSWORD|secret|SECRET|token|TOKEN)\s*:\s*[a-zA-Z0-9_]{8,}' docker-compose.yml | grep -v '\${'; then
+            echo "ERROR: Hardcoded secret detected in docker-compose.yml"
+            exit 1
+          fi
+          echo "No hardcoded secrets found in docker-compose.yml"
+
+  codeql-analysis:
+    name: CodeQL SAST
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: python, javascript
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v4
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:python"

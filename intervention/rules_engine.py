@@ -220,8 +220,9 @@ def save_intervention(intervention: Dict[str, Any]) -> int:
     cursor.execute(
         """INSERT INTO interventions
         (customer_id, intervention_type, channel, trigger_reason,
-         shap_drivers, risk_score_at_trigger, risk_tier_at_trigger, status)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, 'pending')
+         shap_drivers, risk_score_at_trigger, risk_tier_at_trigger, status,
+         triggered_by, trigger_ip, consent_verified)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, 'pending', %s, %s, %s)
         RETURNING id""",
         (
             intervention["customer_id"],
@@ -231,6 +232,9 @@ def save_intervention(intervention: Dict[str, Any]) -> int:
             json.dumps(intervention.get("shap_drivers", [])),
             intervention["risk_score"],
             intervention["risk_tier"],
+            intervention.get("triggered_by", "system"),
+            intervention.get("trigger_ip"),
+            intervention.get("consent_verified", False),
         )
     )
 

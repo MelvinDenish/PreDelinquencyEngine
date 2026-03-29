@@ -1,16 +1,31 @@
 @import "tailwindcss";
 
+/* ─── Barclays Brand Design Tokens ─────────────────────────────────────────── */
 :root {
-  --bg-dark: #060a14;
-  --bg-surface: #0c1220;
-  --bg-card: rgba(12, 18, 32, 0.85);
-  --border: rgba(255, 255, 255, 0.07);
-  --cyan: #00d4ff;
-  --purple: #7b2fff;
-  --pink: #ff3cac;
-  --green: #00e676;
-  --amber: #ffb300;
-  --red: #ff5252;
+  /* Barclays brand palette */
+  --barclays-navy:       #002C6C;
+  --barclays-blue:       #00AEEF;
+  --barclays-light-blue: #6EC6E6;
+  --barclays-dark-navy:  #00395D;
+
+  /* Surface colours */
+  --bg-dark:    #060c18;
+  --bg-surface: #0A1628;
+  --bg-card:    rgba(13, 31, 53, 0.90);
+  --border:     rgba(0, 174, 239, 0.12);
+
+  /* Semantic colours — keep these; used throughout */
+  --cyan:   #00AEEF;   /* ← now Barclays blue */
+  --purple: #5B21B6;
+  --pink:   #EC4899;
+  --green:  #22C55E;
+  --amber:  #F59E0B;
+  --red:    #EF4444;
+
+  /* Text */
+  --text-primary:  #F0F6FF;
+  --text-muted:    #94A3B8;
+  --text-subtle:   #4B6278;
 }
 
 * { box-sizing: border-box; }
@@ -19,7 +34,10 @@ html { scroll-behavior: smooth; }
 
 body {
   background: var(--bg-dark);
-  color: #f1f5f9;
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(0, 44, 108, 0.35) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 30% at 80% 80%, rgba(0, 57, 93, 0.20) 0%, transparent 60%);
+  color: var(--text-primary);
   font-family: 'Inter', system-ui, sans-serif;
   min-height: 100vh;
   overflow-x: hidden;
@@ -60,9 +78,9 @@ body {
 .animate-fade-in-up { animation: fadeInUp 0.4s ease; }
 .animate-flow-pulse { animation: flowPulse 2s ease-in-out infinite; }
 
-/* Gradient text */
+/* Gradient text — Barclays blue to light blue */
 .gradient-text {
-  background: linear-gradient(135deg, #00d4ff 0%, #7b2fff 50%, #ff3cac 100%);
+  background: linear-gradient(135deg, #00AEEF 0%, #6EC6E6 50%, #FFFFFF 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -70,10 +88,35 @@ body {
 
 /* Glass panel */
 .glass-panel {
-  background: rgba(12, 18, 32, 0.85);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
   border-radius: 14px;
-  backdrop-filter: blur(12px);
+  backdrop-filter: blur(16px);
+}
+
+/* Barclays accent line — used as section divider */
+.barclays-accent {
+  height: 3px;
+  background: linear-gradient(90deg, var(--barclays-blue) 0%, var(--barclays-light-blue) 60%, transparent 100%);
+  border-radius: 2px;
+}
+
+/* Status badge variants */
+.badge-stable   { background: rgba(34,197,94,0.12);  color: #22C55E; border: 1px solid rgba(34,197,94,0.25);  border-radius: 5px; padding: 2px 8px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+.badge-watch    { background: rgba(245,158,11,0.12); color: #F59E0B; border: 1px solid rgba(245,158,11,0.25); border-radius: 5px; padding: 2px 8px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+.badge-critical { background: rgba(239,68,68,0.12);  color: #EF4444; border: 1px solid rgba(239,68,68,0.25);  border-radius: 5px; padding: 2px 8px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+.badge-live     { background: rgba(0,174,239,0.12);  color: #00AEEF; border: 1px solid rgba(0,174,239,0.25);  border-radius: 5px; padding: 2px 8px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
+
+/* Barclays card — elevated surface */
+.barclays-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.barclays-card:hover {
+  border-color: rgba(0, 174, 239, 0.30);
+  box-shadow: 0 0 20px rgba(0, 174, 239, 0.06);
 }
 
 /* Recharts custom dark theme */
