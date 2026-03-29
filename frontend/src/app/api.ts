@@ -91,3 +91,78 @@ export async function explainCustomer(customerId: string) {
   if (!res.ok) throw new Error(`Explain API failed: ${res.status}`);
   return res.json();
 }
+
+// ─── What-If Simulator ───────────────────────────────────────────────────────
+
+export interface TierDistribution {
+  stable: number;
+  watch: number;
+  critical: number;
+  stable_pct: number;
+  watch_pct: number;
+  critical_pct: number;
+}
+
+export interface WhatIfResult {
+  scenario_name: string;
+  total_customers: number;
+  current_distribution: TierDistribution;
+  simulated_distribution: TierDistribution;
+  customers_upgraded_to_watch: number;
+  customers_upgraded_to_critical: number;
+  customers_downgraded: number;
+  estimated_npa_delta_crore: number;
+  intervention_cost_lakh: number | null;
+  intervention_roi: number | null;
+  avg_risk_score_current: number;
+  avg_risk_score_simulated: number;
+  segment_breakdown: Record<string, { count: number; new_watch: number; new_critical: number }> | null;
+  top_affected_employers: Array<{ employer: string; total: number; newly_at_risk: number }> | null;
+  region_breakdown: Record<string, { total: number; newly_at_risk: number; affected: boolean }> | null;
+}
+
+export interface PortfolioSummary {
+  total_customers: number;
+  distribution: {
+    stable: { count: number; pct: number };
+    watch: { count: number; pct: number };
+    critical: { count: number; pct: number };
+  };
+  avg_risk_score: number;
+  p90_risk_score: number;
+  segments: Record<string, number>;
+  regions: Record<string, number>;
+  estimated_portfolio_at_risk_crore: number;
+}
+
+export interface ScenarioTemplate {
+  id: string;
+  name: string;
+  description: string;
+  params: Record<string, unknown>;
+}
+
+export async function runWhatIfSimulation(params: Record<string, unknown>): Promise<WhatIfResult> {
+  const res = await fetch(`${API_BASE}/whatif/simulate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`What-If simulation failed (${res.status}): ${text}`);
+  }
+  return res.json();
+}
+
+export async function getScenarioTemplates(): Promise<{ templates: ScenarioTemplate[] }> {
+  const res = await fetch(`${API_BASE}/whatif/scenarios/templates`);
+  if (!res.ok) throw new Error(`Templates fetch failed: ${res.status}`);
+  return res.json();
+}
+
+export async function getPortfolioSummary(): Promise<PortfolioSummary> {
+  const res = await fetch(`${API_BASE}/whatif/portfolio/summary`);
+  if (!res.ok) throw new Error(`Portfolio summary failed: ${res.status}`);
+  return res.json();
+}

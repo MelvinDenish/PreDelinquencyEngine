@@ -1,0 +1,52 @@
+---
+# HTTPS Ingress for PDI Engine scoring service
+# Requires: cert-manager + nginx-ingress-controller installed in the cluster
+# cert-manager issues TLS certificates automatically from Let's Encrypt
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pdi-engine-ingress
+  namespace: pdi-engine
+  annotations:
+    # Force HTTPS — redirect all HTTP to HTTPS
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    # Request size limit (matches app-level 1 MB limit)
+    nginx.ingress.kubernetes.io/proxy-body-size: "1m"
+    # Rate limiting at ingress level (second layer beyond slowapi)
+    nginx.ingress.kubernetes.io/limit-rps: "100"
+    nginx.ingress.kubernetes.io/limit-connections: "20"
+    # Security headers
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      add_header X-Frame-Options "DENY" always;
+      add_header X-Content-Type-Options "nosniff" always;
+      add_header X-XSS-Protection "1; mode=block" always;
+      add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+      add_header Content-Security-Policy "default-src 'self'; script-src 'self'; object-src 'none';" always;
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    # cert-manager: automatically provision TLS cert from Let's Encrypt
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - pdi.barclays.in
+      secretName: pdi-tls-cert
+  rules:
+    - host: pdi.barclays.in
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: pdi-scoring-service
+                port:
+                  number: 8000
+          - path: /dashboard
+            pathType: Prefix
+            backend:
+              service:
+                name: pdi-dashboard-service
+                port:
+                  number: 8050
