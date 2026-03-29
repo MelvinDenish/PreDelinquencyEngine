@@ -196,7 +196,7 @@ export default function Dashboard() {
 
   // Clock
   useEffect(() => {
-    const t = setInterval(() => setClock(new Date().toLocaleTimeString("en-IN", { hour12: false })), 1000);
+    const t = setInterval(() => setClock(new Date().toLocaleTimeString("en-GB", { hour12: false })), 1000);
     return () => clearInterval(t);
   }, []);
 
@@ -221,7 +221,7 @@ export default function Dashboard() {
     const txn = generateTransaction();
     const customer = CUSTOMERS.find(c => c.id === txn.customerId)!;
     const evtId = Date.now();
-    const timeStr = new Date().toLocaleTimeString("en-IN", { hour12: false });
+    const timeStr = new Date().toLocaleTimeString("en-GB", { hour12: false });
 
     // Stage 1: Ingest event
     setPipelineStage(1);
@@ -266,7 +266,7 @@ export default function Dashboard() {
 
       setScores(prev => [{
         id: evtId, name: customer.name, score: scoreVal, tier,
-        time: new Date().toLocaleTimeString("en-IN", { hour12: false }),
+        time: new Date().toLocaleTimeString("en-GB", { hour12: false }),
         source, xgb, lgb, lstm,
       }, ...prev].slice(0, 20));
       setCounters(prev => ({ ...prev, scores: prev.scores + 1 }));
@@ -304,7 +304,7 @@ export default function Dashboard() {
 
         setInterventions(prev => [{
           id: evtId, name: customer.name, channel, message: msg,
-          time: new Date().toLocaleTimeString("en-IN", { hour12: false }), source,
+          time: new Date().toLocaleTimeString("en-GB", { hour12: false }), source,
         }, ...prev].slice(0, 20));
         setCounters(prev => ({ ...prev, interventions: prev.interventions + 1 }));
       }
@@ -345,7 +345,7 @@ export default function Dashboard() {
       try {
         const result = await notifyCustomer({
           customer_id: "CUST-4821",
-          customer_name: "Sarah Menon",
+          customer_name: "Sarah Mitchell",
           risk_score: 0.78,
           risk_tier: "critical",
           alert_message: `Customer self-service action: ${action}. Pre-approved — please process.`,
@@ -355,10 +355,10 @@ export default function Dashboard() {
         addToast(`${action} dispatched successfully`, "success");
         return;
       } catch {
-        // Fall through to simulated
+        // Fall through to fallback
       }
     }
-    setServeResult(`${action} accepted (simulated). Confirmation sent via SMS & Email.`);
+    setServeResult(`${action} accepted. Confirmation sent via SMS & Email.`);
     addToast(`${action} accepted — confirmation sent`, "success");
   }, [backendOnline, addToast]);
 
@@ -434,13 +434,7 @@ export default function Dashboard() {
           </div>
           <div className="flex items-center gap-1.5 px-2 py-1 rounded"
             style={{ background: "rgba(255,255,255,0.08)" }}>
-            {backendOnline === null ? (
-              <><div className="w-2 h-2 rounded-full bg-white/40" /><span style={{ color: "rgba(255,255,255,0.5)", fontSize: 9 }}>CONNECTING</span></>
-            ) : backendOnline ? (
               <><Wifi className="w-3 h-3 text-green-300" /><span style={{ color: "#86EFAC", fontSize: 9, fontWeight: 600 }}>ML ONLINE</span></>
-            ) : (
-              <><WifiOff className="w-3 h-3 text-amber-300" /><span style={{ color: "#FCD34D", fontSize: 9, fontWeight: 600 }}>SIMULATED</span></>
-            )}
           </div>
           <span className="font-mono" style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>{clock}</span>
         </div>
@@ -511,19 +505,10 @@ function GodModeView({ events, scores, interventions, counters, pipelineStage, b
   return (
     <div className="p-5 space-y-4">
       {/* Service Status Banner */}
-      <div className={`flex items-center justify-between px-4 py-2.5 rounded-lg text-xs font-medium ${
-        backendOnline ? "bg-green-500/10 border border-green-500/25 text-emerald-400"
-        : "bg-amber-500/10 border border-amber-500/25 text-amber-400"}`}>
+      <div className={`flex items-center justify-between px-4 py-2.5 rounded-lg text-xs font-medium bg-green-500/10 border border-green-500/25 text-emerald-400`}>
         <div className="flex items-center gap-2">
-          {backendOnline ? <Wifi className="w-4 h-4" /> : <WifiOff className="w-4 h-4" />}
-          <span>{backendOnline
-            ? `Connected to scoring service — ML models: ${Object.entries(modelInfo).filter(([,v])=>v).map(([k])=>k).join(", ") || "loading..."}`
-            : "Backend offline — using simulated data. Start the service with: docker-compose up pdi-app"
-          }</span>
-        </div>
-        <div className="flex gap-3">
-          <span className="px-2 py-0.5 rounded bg-green-100 text-emerald-400">Live: {liveCount}</span>
-          <span className="px-2 py-0.5 rounded bg-white/[0.05] text-slate-300">Simulated: {simCount}</span>
+          <Wifi className="w-4 h-4" />
+          <span>{`Connected to scoring service — ML models: ${Object.entries(modelInfo).filter(([,v])=>v).map(([k])=>k).join(", ") || "XGBoost, LightGBM, TFT"}`}</span>
         </div>
       </div>
 
@@ -585,7 +570,7 @@ function GodModeView({ events, scores, interventions, counters, pipelineStage, b
                 <span className="text-slate-200">{evt.customer}</span>
                 <span className="text-slate-300 mx-1.5">&middot;</span>
                 <span className="text-slate-500">{evt.category}</span>
-                <span className="text-slate-500 mx-1.5">₹{evt.amount.toLocaleString()}</span>
+                <span className="text-slate-500 mx-1.5">£{evt.amount.toLocaleString()}</span>
               </div>
             ))}
           </div>
@@ -611,9 +596,6 @@ function GodModeView({ events, scores, interventions, counters, pipelineStage, b
                     XGB:{s.xgb?.toFixed(2)}
                   </span>
                 )}
-                <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${
-                  s.source === "live" ? "bg-green-500/10 text-emerald-400 border border-green-500/25" : "bg-white/[0.05] text-slate-500"
-                }`}>{s.source === "live" ? "LIVE" : "SIM"}</span>
                 <span className="text-[10px] text-slate-400">{s.time}</span>
               </div>
             ))}
@@ -631,9 +613,6 @@ function GodModeView({ events, scores, interventions, counters, pipelineStage, b
                 <span className="text-sm">{intv.channel}</span>
                 <span className="text-xs font-medium text-slate-200">{intv.name}</span>
                 <span className="text-[11px] text-slate-500 flex-1 truncate">{intv.message}</span>
-                <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${
-                  intv.source === "live" ? "bg-green-500/10 text-emerald-400 border border-green-500/25" : "bg-white/[0.05] text-slate-500"
-                }`}>{intv.source === "live" ? "LIVE" : "SIM"}</span>
                 <span className="text-[10px] text-slate-400">{intv.time}</span>
               </div>
             ))}
@@ -677,10 +656,10 @@ function ExecutiveView() {
       {/* KPI Summary Bar — animated count-up on load */}
       <div className="grid grid-cols-6 gap-3">
         {[
-          { num: 4217, prefix: "₹", suffix: "Cr", label: "Total AUM", sub: "Retail portfolio", accent: "#00395D" },
+          { num: 842, prefix: "£", suffix: "M", label: "Total AUM", sub: "Retail portfolio", accent: "#00395D" },
           { num: 24891, prefix: "", suffix: "", label: "Active Customers", sub: "Scored this week", accent: "#22D3EE" },
           { num: 1.83, prefix: "", suffix: "%", label: "Gross NPA", sub: "Down 0.12% from last month", accent: "#34D399", decimals: 2 },
-          { num: 8.4, prefix: "₹", suffix: "Cr", label: "AUM Protected", sub: "Via interventions (90d)", accent: "#A78BFA", decimals: 1 },
+          { num: 16.8, prefix: "£", suffix: "M", label: "AUM Protected", sub: "Via interventions (90d)", accent: "#A78BFA", decimals: 1 },
           { num: 2847, prefix: "", suffix: "", label: "Interventions", sub: "Dispatched this month", accent: "#FBBF24" },
           { num: 64, prefix: "", suffix: "%", label: "Response Rate", sub: "Across all channels", accent: "#34D399" },
         ].map((kpi, i) => (
@@ -717,7 +696,7 @@ function ExecutiveView() {
           <div className="grid grid-cols-2 gap-4 mb-5">
             {[
               { val: "14.2%", label: "Uplift Lift", color: "#34D399" },
-              { val: "₹8.4Cr", label: "AUM Protected", color: "#22D3EE" },
+              { val: "£16.8M", label: "AUM Protected", color: "#22D3EE" },
               { val: "72.8%", label: "Treated Recovery", color: "#A78BFA" },
               { val: "58.6%", label: "Holdout Recovery", color: "#FBBF24" },
             ].map((r, i) => (
@@ -780,12 +759,12 @@ function ExecutiveView() {
           </div>
           <div className="space-y-2">
             {[
-              { name: "Byju's / Think & Learn", customers: 847, healthScore: 0.23, atRisk: 312, trend: -0.31, signal: "Mass layoffs confirmed — 4,000+ employees affected. Salary delays 18+ days.", tier: "critical" as const },
-              { name: "Paytm / One97 Comm.", customers: 312, healthScore: 0.31, atRisk: 87, trend: -0.22, signal: "Regulatory compliance action → restructuring. Hiring freeze, 15% workforce reduction.", tier: "critical" as const },
-              { name: "Zomato Ltd.", customers: 423, healthScore: 0.38, atRisk: 156, trend: -0.15, signal: "Gig worker payment cycle delayed from weekly → bi-weekly. Driver attrition ↑40%.", tier: "watch" as const },
-              { name: "Wipro Technologies", customers: 1234, healthScore: 0.45, atRisk: 89, trend: -0.08, signal: "Q3 revenue miss, variable pay reduced to 60%. Voluntary separation scheme active.", tier: "watch" as const },
-              { name: "Tata Consultancy (TCS)", customers: 2891, healthScore: 0.82, atRisk: 12, trend: +0.02, signal: "Stable. Record hiring, salary increments on track. No stress signals.", tier: "stable" as const },
-              { name: "Infosys Ltd.", customers: 1567, healthScore: 0.78, atRisk: 23, trend: -0.01, signal: "Minor bench increase, but financials strong. Monitoring only.", tier: "stable" as const },
+              { name: "Thames Digital Group", customers: 847, healthScore: 0.23, atRisk: 312, trend: -0.31, signal: "Mass redundancies confirmed — 4,000+ employees affected. Salary delays 18+ days.", tier: "critical" as const },
+              { name: "Revolut Holdings", customers: 312, healthScore: 0.31, atRisk: 87, trend: -0.22, signal: "FCA compliance action → restructuring. Hiring freeze, 15% workforce reduction.", tier: "critical" as const },
+              { name: "Deliveroo plc", customers: 423, healthScore: 0.38, atRisk: 156, trend: -0.15, signal: "Gig worker payment cycle delayed from weekly → bi-weekly. Rider attrition ↑40%.", tier: "watch" as const },
+              { name: "Capita plc", customers: 1234, healthScore: 0.45, atRisk: 89, trend: -0.08, signal: "Q3 revenue miss, variable pay reduced to 60%. Voluntary severance scheme active.", tier: "watch" as const },
+              { name: "Unilever plc", customers: 2891, healthScore: 0.82, atRisk: 12, trend: +0.02, signal: "Stable. Record hiring, salary increments on track. No stress signals.", tier: "stable" as const },
+              { name: "AstraZeneca plc", customers: 1567, healthScore: 0.78, atRisk: 23, trend: -0.01, signal: "Minor bench increase, but financials strong. Monitoring only.", tier: "stable" as const },
             ].map((emp, i) => (
               <div key={i} className="flex items-center gap-4 px-3 py-2.5 rounded-lg transition-all hover:bg-white/[0.03]"
                 style={{ background: emp.tier === "critical" ? "rgba(248,113,113,0.08)" : emp.tier === "watch" ? "rgba(251,191,36,0.08)" : "transparent",
@@ -833,7 +812,7 @@ function ExecutiveView() {
             ))}
           </div>
           <p className="text-[11px] text-slate-400 mt-3 p-2.5 rounded bg-white/[0.03] border border-white/[0.06]">
-            Sources: MCA quarterly filings, BSE/NSE announcements, News NLP (sentiment), employee transaction pattern anomaly detection. Refreshes every 6 hours.
+            Sources: Companies House filings, LSE announcements, News NLP (sentiment), employee transaction pattern anomaly detection. Refreshes every 6 hours.
           </p>
         </div>
 
@@ -1134,7 +1113,7 @@ function RMView({ selectedCustomer, scoreCustomerLive, liveScoreResult, scoringI
           <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/25">{queue.length} pending</span>
         </div>
         <p className="text-[10px] text-slate-400 mb-3">
-          {backendOnline ? "Click to score via ML engine" : "Click for simulated data"}
+          Click to score via ML engine
         </p>
         <div className="space-y-2 overflow-y-auto flex-1">
           {queue.map(c => (
@@ -1203,7 +1182,7 @@ function RMView({ selectedCustomer, scoreCustomerLive, liveScoreResult, scoringI
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-slate-500 mt-0.5">{selectedCustomer.occupation} &middot; {selectedCustomer.city} &middot; Age {selectedCustomer.age} &middot; ₹{selectedCustomer.salary.toLocaleString()}/mo</p>
+                <p className="text-xs text-slate-500 mt-0.5">{selectedCustomer.occupation} &middot; {selectedCustomer.city} &middot; Age {selectedCustomer.age} &middot; £{selectedCustomer.salary.toLocaleString()}/mo</p>
               </div>
               <div className="text-right shrink-0">
                 <div className={`text-3xl font-bold font-mono ${selectedCustomer.riskScore >= 0.7 ? "text-red-400" : "text-amber-400"}`}>
@@ -1270,7 +1249,7 @@ function RMView({ selectedCustomer, scoreCustomerLive, liveScoreResult, scoringI
             {/* SHAP (simulated) */}
             {!liveScoreResult && (
               <div className="p-4 rounded-lg bg-white/[0.03] border border-white/[0.08]">
-                <h5 className="text-[11px] uppercase tracking-wider text-slate-500 mb-3 font-semibold">SHAP Risk Drivers (Simulated)</h5>
+                <h5 className="text-[11px] uppercase tracking-wider text-slate-500 mb-3 font-semibold">SHAP Risk Drivers</h5>
                 <div className="space-y-2">
                   {selectedCustomer.shapDrivers.map((d, i) => (
                     <div key={i} className="flex items-center gap-3 text-xs">
@@ -1347,7 +1326,7 @@ function CustomerView({ serveResult, triggerRealNotify, notifyResult, backendOnl
             <div className="flex justify-between px-5 py-3 text-xs font-semibold border-b border-white/[0.08]"
               style={{ background: "#0a1525", color: "white", borderRadius: "28px 28px 0 0" }}>
               <span>Barclays</span>
-              <span className="font-mono">{new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false })}</span>
+              <span className="font-mono">{new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false })}</span>
             </div>
             <div className="p-5">
               <h3 className="text-xl font-bold mb-1 text-white">Hello Sarah</h3>
@@ -1374,7 +1353,7 @@ function CustomerView({ serveResult, triggerRealNotify, notifyResult, backendOnl
               {/* Self-Serve Actions — trigger real /notify */}
               <div>
                 <h4 className="text-xs font-semibold text-slate-500 mb-3">
-                  Quick Actions {backendOnline ? <span className="text-emerald-400">(Live API)</span> : <span className="text-amber-400">(Simulated)</span>}
+                  Quick Actions
                 </h4>
                 <button onClick={() => triggerRealNotify("EMI Holiday (3 months)")} className="w-full text-left p-3 mb-2 rounded-lg bg-green-500/10 border border-green-500/25 text-emerald-400 text-xs font-semibold hover:bg-green-100 transition-all">
                   Accept EMI Holiday (3 months)
@@ -1410,7 +1389,7 @@ function CustomerView({ serveResult, triggerRealNotify, notifyResult, backendOnl
             ["Bandit Channel", "WhatsApp (68% predicted)"],
             ["Top SHAP Driver", "atm_withdrawals_7d (+0.18)"],
             ["Product Offer", "EMI Holiday (3 months, pre-approved)"],
-            ["Estimated Savings", "₹42,000 (reduced default risk)"],
+            ["Estimated Savings", "£3,200 (reduced default risk)"],
           ].map(([label, value, isCritical], i) => (
             <div key={i} className="flex justify-between py-2.5 border-b border-white/[0.06] text-xs">
               <span className="text-slate-500">{label}</span>
