@@ -1,0 +1,820 @@
+[
+  {
+    "event_id": "EVT_1774764735833_1350",
+    "event_time": "2026-03-29T06:12:15.833684Z",
+    "pipeline_run_ms": 1573,
+    "customer_id": "CUST_STRESSED_001",
+    "customer_name": "Rahul Verma",
+    "city": "Delhi",
+    "region": "North",
+    "segment": "gig_worker",
+    "credit_score": 603,
+    "monthly_salary": 40000,
+    "txn_id": "TXN_1774764734260_515",
+    "txn_type": "payday_lender",
+    "merchant_category": "groceries",
+    "amount": 7174,
+    "is_stress_signal": false,
+    "risk_score": 0.44930697721702273,
+    "risk_tier": "watch",
+    "risk_tier_icon": "🟡",
+    "xgboost_score": 0.42623280247714573,
+    "lightgbm_score": 0.43851137189896805,
+    "tft_score": null,
+    "ensemble_score": 0.44930697721702273,
+    "calibrated_pd": 0.40437627949532046,
+    "tte_days": 36,
+    "uplift_score": null,
+    "confidence_flag": "yellow",
+    "meta_learner_used": false,
+    "top_shap_features": [
+      {
+        "feature": "dti_ratio",
+        "value": 0.4793037492054515
+      },
+      {
+        "feature": "credit_score",
+        "value": -0.3
+      },
+      {
+        "feature": "failed_autodebits",
+        "value": 0.30000000000000004
+      }
+    ],
+    "product_actions": [
+      "flag_for_review",
+      "reduce_credit_limit",
+      "send_payment_reminder"
+    ],
+    "ml_source": "Heuristic Fallback",
+    "intervention_type": "preventive_outreach",
+    "notify_status": "dispatch_error",
+    "channels_sent": "error",
+    "channels_count": 0,
+    "notify_results": [],
+    "stages": [
+      {
+        "stage": "ingestion",
+        "ts": "2026-03-29T06:12:14.260621Z",
+        "status": "ok",
+        "label": "CBS Ingested"
+      },
+      {
+        "stage": "auth",
+        "ts": "2026-03-29T06:12:14.260621Z",
+        "status": "ok",
+        "label": "JWT Auth Token Obtained"
+      },
+      {
+        "stage": "ml_scoring",
+        "ts": "2026-03-29T06:12:14.305582Z",
+        "status": "fallback",
+        "label": "ML Scored (Heuristic Fallback)"
+      },
+      {
+        "stage": "risk_routing",
+        "ts": "2026-03-29T06:12:14.305582Z",
+        "status": "ok",
+        "label": "Routed to WATCH"
+      },
+      {
+        "stage": "notification",
+        "ts": "2026-03-29T06:12:15.833713Z",
+        "status": "ok",
+        "label": "Notified via error"
+      },
+      {
+        "stage": "complete",
+        "ts": "2026-03-29T06:12:15.833719Z",
+        "status": "ok",
+        "label": "Pipeline Complete (1573ms)"
+      }
+    ]
+  },
+  {
+    "event_id": "EVT_1774764579381_8128",
+    "event_time": "2026-03-29T06:09:39.381302Z",
+    "pipeline_run_ms": 1603,
+    "customer_id": "CUST_WATCH_002",
+    "customer_name": "Deepa Menon",
+    "city": "Kochi",
+    "region": "South",
+    "segment": "self_employed",
+    "credit_score": 648,
+    "monthly_salary": 42000,
+    "txn_id": "TXN_1774764577778_1215",
+    "txn_type": "pos_purchase",
+    "merchant_category": "groceries",
+    "amount": 6851,
+    "is_stress_signal": false,
+    "risk_score": 0.45830951404225234,
+    "risk_tier": "watch",
+    "risk_tier_icon": "🟡",
+    "xgboost_score": 0.44033666645392566,
+    "lightgbm_score": 0.44132272327329825,
+    "tft_score": null,
+    "ensemble_score": 0.45830951404225234,
+    "calibrated_pd": 0.4124785626380271,
+    "tte_days": 53,
+    "uplift_score": null,
+    "confidence_flag": "yellow",
+    "meta_learner_used": false,
+    "top_shap_features": [
+      {
+        "feature": "dti_ratio",
+        "value": 0.3966639872535851
+      },
+      {
+        "feature": "credit_score",
+        "value": -0.3
+      },
+      {
+        "feature": "failed_autodebits",
+        "value": 0.2
+      }
+    ],
+    "product_actions": [
+      "flag_for_review",
+      "reduce_credit_limit",
+      "send_payment_reminder"
+    ],
+    "ml_source": "Heuristic Fallback",
+    "intervention_type": "preventive_outreach",
+    "notify_status": "dispatch_error",
+    "channels_sent": "error",
+    "channels_count": 0,
+    "notify_results": [],
+    "stages": [
+      {
+        "stage": "ingestion",
+        "ts": "2026-03-29T06:09:37.778675Z",
+        "status": "ok",
+        "label": "CBS Ingested"
+      },
+      {
+        "stage": "auth",
+        "ts": "2026-03-29T06:09:37.778675Z",
+        "status": "ok",
+        "label": "JWT Auth Token Obtained"
+      },
+      {
+        "stage": "ml_scoring",
+        "ts": "2026-03-29T06:09:37.845018Z",
+        "status": "fallback",
+        "label": "ML Scored (Heuristic Fallback)"
+      },
+      {
+        "stage": "risk_routing",
+        "ts": "2026-03-29T06:09:37.845018Z",
+        "status": "ok",
+        "label": "Routed to WATCH"
+      },
+      {
+        "stage": "notification",
+        "ts": "2026-03-29T06:09:39.381362Z",
+        "status": "ok",
+        "label": "Notified via error"
+      },
+      {
+        "stage": "complete",
+        "ts": "2026-03-29T06:09:39.381370Z",
+        "status": "ok",
+        "label": "Pipeline Complete (1603ms)"
+      }
+    ]
+  },
+  {
+    "event_id": "EVT_1774763582308_2570",
+    "event_time": "2026-03-29T05:53:02.308855Z",
+    "pipeline_run_ms": 32,
+    "customer_id": "CUST_STABLE_003",
+    "customer_name": "Rohit Desai",
+    "city": "Pune",
+    "region": "West",
+    "segment": "salaried",
+    "credit_score": 788,
+    "monthly_salary": 95000,
+    "txn_id": "TXN_1774763582276_6214",
+    "txn_type": "online_transfer",
+    "merchant_category": "dining",
+    "amount": 591,
+    "is_stress_signal": false,
+    "risk_score": 0.19168947313447782,
+    "risk_tier": "stable",
+    "risk_tier_icon": "🟢",
+    "xgboost_score": 0.16456474236126062,
+    "lightgbm_score": 0.21616728789581607,
+    "tft_score": null,
+    "ensemble_score": 0.19168947313447782,
+    "calibrated_pd": 0.17252052582103003,
+    "tte_days": null,
+    "uplift_score": null,
+    "confidence_flag": "yellow",
+    "meta_learner_used": false,
+    "top_shap_features": [
+      {
+        "feature": "dti_ratio",
+        "value": 0.20434501890382256
+      },
+      {
+        "feature": "credit_score",
+        "value": -0.3
+      },
+      {
+        "feature": "failed_autodebits",
+        "value": 0
+      }
+    ],
+    "product_actions": [
+      "monitor_passively"
+    ],
+    "ml_source": "Heuristic Fallback",
+    "intervention_type": "none",
+    "notify_status": "no_action",
+    "channels_sent": "none",
+    "channels_count": 0,
+    "notify_results": [],
+    "stages": [
+      {
+        "stage": "ingestion",
+        "ts": "2026-03-29T05:53:02.276829Z",
+        "status": "ok",
+        "label": "CBS Ingested"
+      },
+      {
+        "stage": "auth",
+        "ts": "2026-03-29T05:53:02.276829Z",
+        "status": "ok",
+        "label": "JWT Auth Token Obtained"
+      },
+      {
+        "stage": "ml_scoring",
+        "ts": "2026-03-29T05:53:02.308654Z",
+        "status": "fallback",
+        "label": "ML Scored (Heuristic Fallback)"
+      },
+      {
+        "stage": "risk_routing",
+        "ts": "2026-03-29T05:53:02.308654Z",
+        "status": "ok",
+        "label": "Routed to STABLE"
+      },
+      {
+        "stage": "notification",
+        "ts": "2026-03-29T05:53:02.308880Z",
+        "status": "skipped",
+        "label": "No Action (Stable)"
+      },
+      {
+        "stage": "complete",
+        "ts": "2026-03-29T05:53:02.308888Z",
+        "status": "ok",
+        "label": "Pipeline Complete (32ms)"
+      }
+    ]
+  },
+  {
+    "event_id": "EVT_1774763406660_8526",
+    "event_time": "2026-03-29T05:50:06.660024Z",
+    "pipeline_run_ms": 39,
+    "customer_id": "CUST_STABLE_001",
+    "customer_name": "Arjun Nair",
+    "city": "Bangalore",
+    "region": "South",
+    "segment": "salaried",
+    "credit_score": 764,
+    "monthly_salary": 120000,
+    "txn_id": "TXN_1774763406621_2218",
+    "txn_type": "online_transfer",
+    "merchant_category": "fuel",
+    "amount": 2558,
+    "is_stress_signal": false,
+    "risk_score": 0.18753287357209417,
+    "risk_tier": "stable",
+    "risk_tier_icon": "🟢",
+    "xgboost_score": 0.18148116846633194,
+    "lightgbm_score": 0.18478705352187821,
+    "tft_score": null,
+    "ensemble_score": 0.18753287357209417,
+    "calibrated_pd": 0.16877958621488476,
+    "tte_days": null,
+    "uplift_score": null,
+    "confidence_flag": "yellow",
+    "meta_learner_used": false,
+    "top_shap_features": [
+      {
+        "feature": "dti_ratio",
+        "value": 0.21018684946691643
+      },
+      {
+        "feature": "credit_score",
+        "value": -0.3
+      },
+      {
+        "feature": "failed_autodebits",
+        "value": 0
+      }
+    ],
+    "product_actions": [
+      "monitor_passively"
+    ],
+    "ml_source": "Heuristic Fallback",
+    "intervention_type": "none",
+    "notify_status": "no_action",
+    "channels_sent": "none",
+    "channels_count": 0,
+    "notify_results": [],
+    "stages": [
+      {
+        "stage": "ingestion",
+        "ts": "2026-03-29T05:50:06.621760Z",
+        "status": "ok",
+        "label": "CBS Ingested"
+      },
+      {
+        "stage": "auth",
+        "ts": "2026-03-29T05:50:06.621760Z",
+        "status": "ok",
+        "label": "JWT Auth Token Obtained"
+      },
+      {
+        "stage": "ml_scoring",
+        "ts": "2026-03-29T05:50:06.659963Z",
+        "status": "fallback",
+        "label": "ML Scored (Heuristic Fallback)"
+      },
+      {
+        "stage": "risk_routing",
+        "ts": "2026-03-29T05:50:06.659963Z",
+        "status": "ok",
+        "label": "Routed to STABLE"
+      },
+      {
+        "stage": "notification",
+        "ts": "2026-03-29T05:50:06.660042Z",
+        "status": "skipped",
+        "label": "No Action (Stable)"
+      },
+      {
+        "stage": "complete",
+        "ts": "2026-03-29T05:50:06.660046Z",
+        "status": "ok",
+        "label": "Pipeline Complete (39ms)"
+      }
+    ]
+  },
+  {
+    "event_id": "EVT_1774762813949_7870",
+    "event_time": "2026-03-29T05:40:13.949689Z",
+    "pipeline_run_ms": 36,
+    "customer_id": "CUST_STABLE_002",
+    "customer_name": "Meera Iyer",
+    "city": "Chennai",
+    "region": "South",
+    "segment": "salaried",
+    "credit_score": 742,
+    "monthly_salary": 65000,
+    "txn_id": "TXN_1774762813913_6248",
+    "txn_type": "online_transfer",
+    "merchant_category": "fuel",
+    "amount": 580,
+    "is_stress_signal": false,
+    "risk_score": 0.11195560400784686,
+    "risk_tier": "stable",
+    "risk_tier_icon": "🟢",
+    "xgboost_score": 0.1192292163643097,
+    "lightgbm_score": 0.09225380665453636,
+    "tft_score": null,
+    "ensemble_score": 0.11195560400784686,
+    "calibrated_pd": 0.10076004360706217,
+    "tte_days": null,
+    "uplift_score": null,
+    "confidence_flag": "yellow",
+    "meta_learner_used": false,
+    "top_shap_features": [
+      {
+        "feature": "dti_ratio",
+        "value": 0.19972346320298467
+      },
+      {
+        "feature": "credit_score",
+        "value": -0.3
+      },
+      {
+        "feature": "failed_autodebits",
+        "value": 0
+      }
+    ],
+    "product_actions": [
+      "monitor_passively"
+    ],
+    "ml_source": "Heuristic Fallback",
+    "intervention_type": "none",
+    "notify_status": "no_action",
+    "channels_sent": "none",
+    "channels_count": 0,
+    "notify_results": [],
+    "stages": [
+      {
+        "stage": "ingestion",
+        "ts": "2026-03-29T05:40:13.913815Z",
+        "status": "ok",
+        "label": "CBS Ingested"
+      },
+      {
+        "stage": "auth",
+        "ts": "2026-03-29T05:40:13.913815Z",
+        "status": "ok",
+        "label": "JWT Auth Token Obtained"
+      },
+      {
+        "stage": "ml_scoring",
+        "ts": "2026-03-29T05:40:13.949650Z",
+        "status": "fallback",
+        "label": "ML Scored (Heuristic Fallback)"
+      },
+      {
+        "stage": "risk_routing",
+        "ts": "2026-03-29T05:40:13.949650Z",
+        "status": "ok",
+        "label": "Routed to STABLE"
+      },
+      {
+        "stage": "notification",
+        "ts": "2026-03-29T05:40:13.949702Z",
+        "status": "skipped",
+        "label": "No Action (Stable)"
+      },
+      {
+        "stage": "complete",
+        "ts": "2026-03-29T05:40:13.949704Z",
+        "status": "ok",
+        "label": "Pipeline Complete (36ms)"
+      }
+    ]
+  },
+  {
+    "event_id": "EVT_1774762261748_4698",
+    "event_time": "2026-03-29T05:31:01.748709Z",
+    "pipeline_run_ms": 32,
+    "customer_id": "CUST_CRITICAL_003",
+    "customer_name": "Ravi Shankar",
+    "city": "Patna",
+    "region": "East",
+    "segment": "farmer",
+    "credit_score": 498,
+    "monthly_salary": 22000,
+    "txn_id": "TXN_1774762261716_8320",
+    "txn_type": "payday_lender",
+    "merchant_category": "cash_advance",
+    "amount": 9477,
+    "is_stress_signal": true,
+    "risk_score": 0.7422134548818886,
+    "risk_tier": "critical",
+    "risk_tier_icon": "🔴",
+    "xgboost_score": 0.7569410528156075,
+    "lightgbm_score": 0.760812702692565,
+    "tft_score": null,
+    "ensemble_score": 0.7422134548818886,
+    "calibrated_pd": 0.6679921093936998,
+    "tte_days": 17,
+    "uplift_score": null,
+    "confidence_flag": "yellow",
+    "meta_learner_used": false,
+    "top_shap_features": [
+      {
+        "feature": "dti_ratio",
+        "value": 0.6148252756629258
+      },
+      {
+        "feature": "credit_score",
+        "value": -0.3
+      },
+      {
+        "feature": "failed_autodebits",
+        "value": 0.4
+      }
+    ],
+    "product_actions": [
+      "suspend_new_credit",
+      "escalate_to_rm",
+      "send_financial_counseling"
+    ],
+    "ml_source": "Heuristic Fallback",
+    "intervention_type": "urgent_intervention",
+    "notify_status": "dispatch_error",
+    "channels_sent": "error",
+    "channels_count": 0,
+    "notify_results": [],
+    "stages": [
+      {
+        "stage": "ingestion",
+        "ts": "2026-03-29T05:31:01.716378Z",
+        "status": "ok",
+        "label": "CBS Ingested"
+      },
+      {
+        "stage": "auth",
+        "ts": "2026-03-29T05:31:01.716378Z",
+        "status": "ok",
+        "label": "JWT Auth Token Obtained"
+      },
+      {
+        "stage": "ml_scoring",
+        "ts": "2026-03-29T05:31:01.742368Z",
+        "status": "fallback",
+        "label": "ML Scored (Heuristic Fallback)"
+      },
+      {
+        "stage": "risk_routing",
+        "ts": "2026-03-29T05:31:01.742368Z",
+        "status": "ok",
+        "label": "Routed to CRITICAL"
+      },
+      {
+        "stage": "notification",
+        "ts": "2026-03-29T05:31:01.748732Z",
+        "status": "ok",
+        "label": "Notified via error"
+      },
+      {
+        "stage": "complete",
+        "ts": "2026-03-29T05:31:01.748735Z",
+        "status": "ok",
+        "label": "Pipeline Complete (32ms)"
+      }
+    ]
+  },
+  {
+    "event_id": "EVT_1774759892162_6606",
+    "event_time": "2026-03-29T04:51:32.162998Z",
+    "pipeline_run_ms": 33,
+    "customer_id": "CUST_STABLE_002",
+    "customer_name": "Meera Iyer",
+    "city": "Chennai",
+    "region": "South",
+    "segment": "salaried",
+    "credit_score": 742,
+    "monthly_salary": 65000,
+    "txn_id": "TXN_1774759892129_2463",
+    "txn_type": "online_transfer",
+    "merchant_category": "groceries",
+    "amount": 2294,
+    "is_stress_signal": false,
+    "risk_score": 0.10040814850079527,
+    "risk_tier": "stable",
+    "risk_tier_icon": "🟢",
+    "xgboost_score": 0.08590137974925924,
+    "lightgbm_score": 0.12794397415859604,
+    "tft_score": null,
+    "ensemble_score": 0.10040814850079527,
+    "calibrated_pd": 0.09036733365071574,
+    "tte_days": null,
+    "uplift_score": null,
+    "confidence_flag": "yellow",
+    "meta_learner_used": false,
+    "top_shap_features": [
+      {
+        "feature": "dti_ratio",
+        "value": 0.2597562722195259
+      },
+      {
+        "feature": "credit_score",
+        "value": -0.3
+      },
+      {
+        "feature": "failed_autodebits",
+        "value": 0
+      }
+    ],
+    "product_actions": [
+      "monitor_passively"
+    ],
+    "ml_source": "Heuristic Fallback",
+    "intervention_type": "none",
+    "notify_status": "no_action",
+    "channels_sent": "none",
+    "channels_count": 0,
+    "notify_results": [],
+    "stages": [
+      {
+        "stage": "ingestion",
+        "ts": "2026-03-29T04:51:32.130003Z",
+        "status": "ok",
+        "label": "CBS Ingested"
+      },
+      {
+        "stage": "auth",
+        "ts": "2026-03-29T04:51:32.130003Z",
+        "status": "ok",
+        "label": "JWT Auth Token Obtained"
+      },
+      {
+        "stage": "ml_scoring",
+        "ts": "2026-03-29T04:51:32.162948Z",
+        "status": "fallback",
+        "label": "ML Scored (Heuristic Fallback)"
+      },
+      {
+        "stage": "risk_routing",
+        "ts": "2026-03-29T04:51:32.162948Z",
+        "status": "ok",
+        "label": "Routed to STABLE"
+      },
+      {
+        "stage": "notification",
+        "ts": "2026-03-29T04:51:32.163015Z",
+        "status": "skipped",
+        "label": "No Action (Stable)"
+      },
+      {
+        "stage": "complete",
+        "ts": "2026-03-29T04:51:32.163019Z",
+        "status": "ok",
+        "label": "Pipeline Complete (33ms)"
+      }
+    ]
+  },
+  {
+    "event_id": "EVT_1774759879470_6351",
+    "event_time": "2026-03-29T04:51:19.470689Z",
+    "pipeline_run_ms": 54,
+    "customer_id": "CUST_CRITICAL_003",
+    "customer_name": "Ravi Shankar",
+    "city": "Patna",
+    "region": "East",
+    "segment": "farmer",
+    "credit_score": 498,
+    "monthly_salary": 22000,
+    "txn_id": "TXN_1774759879416_6969",
+    "txn_type": "lending_app",
+    "merchant_category": "lending_app",
+    "amount": 15955,
+    "is_stress_signal": true,
+    "risk_score": 0.7448993283339155,
+    "risk_tier": "critical",
+    "risk_tier_icon": "🔴",
+    "xgboost_score": 0.7316363526969424,
+    "lightgbm_score": 0.7410246984994062,
+    "tft_score": null,
+    "ensemble_score": 0.7448993283339155,
+    "calibrated_pd": 0.6704093955005239,
+    "tte_days": 15,
+    "uplift_score": null,
+    "confidence_flag": "yellow",
+    "meta_learner_used": false,
+    "top_shap_features": [
+      {
+        "feature": "dti_ratio",
+        "value": 0.6960643049915018
+      },
+      {
+        "feature": "credit_score",
+        "value": -0.3
+      },
+      {
+        "feature": "failed_autodebits",
+        "value": 0.6000000000000001
+      }
+    ],
+    "product_actions": [
+      "suspend_new_credit",
+      "escalate_to_rm",
+      "send_financial_counseling"
+    ],
+    "ml_source": "Heuristic Fallback",
+    "intervention_type": "urgent_intervention",
+    "notify_status": "dispatch_error",
+    "channels_sent": "error",
+    "channels_count": 0,
+    "notify_results": [],
+    "stages": [
+      {
+        "stage": "ingestion",
+        "ts": "2026-03-29T04:51:19.416161Z",
+        "status": "ok",
+        "label": "CBS Ingested"
+      },
+      {
+        "stage": "auth",
+        "ts": "2026-03-29T04:51:19.416161Z",
+        "status": "ok",
+        "label": "JWT Auth Token Obtained"
+      },
+      {
+        "stage": "ml_scoring",
+        "ts": "2026-03-29T04:51:19.449181Z",
+        "status": "fallback",
+        "label": "ML Scored (Heuristic Fallback)"
+      },
+      {
+        "stage": "risk_routing",
+        "ts": "2026-03-29T04:51:19.449181Z",
+        "status": "ok",
+        "label": "Routed to CRITICAL"
+      },
+      {
+        "stage": "notification",
+        "ts": "2026-03-29T04:51:19.470720Z",
+        "status": "ok",
+        "label": "Notified via error"
+      },
+      {
+        "stage": "complete",
+        "ts": "2026-03-29T04:51:19.470725Z",
+        "status": "ok",
+        "label": "Pipeline Complete (54ms)"
+      }
+    ]
+  },
+  {
+    "event_id": "EVT_1774759863169_9343",
+    "event_time": "2026-03-29T04:51:03.169840Z",
+    "pipeline_run_ms": 24,
+    "customer_id": "CUST_STABLE_001",
+    "customer_name": "Arjun Nair",
+    "city": "Bangalore",
+    "region": "South",
+    "segment": "salaried",
+    "credit_score": 764,
+    "monthly_salary": 120000,
+    "txn_id": "TXN_1774759863145_1982",
+    "txn_type": "pos_purchase",
+    "merchant_category": "groceries",
+    "amount": 487,
+    "is_stress_signal": false,
+    "risk_score": 0.26579292251848474,
+    "risk_tier": "stable",
+    "risk_tier_icon": "🟢",
+    "xgboost_score": 0.23712313744690985,
+    "lightgbm_score": 0.23937137564626265,
+    "tft_score": null,
+    "ensemble_score": 0.26579292251848474,
+    "calibrated_pd": 0.23921363026663628,
+    "tte_days": null,
+    "uplift_score": null,
+    "confidence_flag": "yellow",
+    "meta_learner_used": false,
+    "top_shap_features": [
+      {
+        "feature": "dti_ratio",
+        "value": 0.20148114386754773
+      },
+      {
+        "feature": "credit_score",
+        "value": -0.3
+      },
+      {
+        "feature": "failed_autodebits",
+        "value": 0
+      }
+    ],
+    "product_actions": [
+      "monitor_passively"
+    ],
+    "ml_source": "Heuristic Fallback",
+    "intervention_type": "none",
+    "notify_status": "no_action",
+    "channels_sent": "none",
+    "channels_count": 0,
+    "notify_results": [],
+    "stages": [
+      {
+        "stage": "ingestion",
+        "ts": "2026-03-29T04:51:03.145190Z",
+        "status": "ok",
+        "label": "CBS Ingested"
+      },
+      {
+        "stage": "auth",
+        "ts": "2026-03-29T04:51:03.145190Z",
+        "status": "ok",
+        "label": "JWT Auth Token Obtained"
+      },
+      {
+        "stage": "ml_scoring",
+        "ts": "2026-03-29T04:51:03.169801Z",
+        "status": "fallback",
+        "label": "ML Scored (Heuristic Fallback)"
+      },
+      {
+        "stage": "risk_routing",
+        "ts": "2026-03-29T04:51:03.169801Z",
+        "status": "ok",
+        "label": "Routed to STABLE"
+      },
+      {
+        "stage": "notification",
+        "ts": "2026-03-29T04:51:03.169852Z",
+        "status": "skipped",
+        "label": "No Action (Stable)"
+      },
+      {
+        "stage": "complete",
+        "ts": "2026-03-29T04:51:03.169855Z",
+        "status": "ok",
+        "label": "Pipeline Complete (24ms)"
+      }
+    ]
+  }
+]
