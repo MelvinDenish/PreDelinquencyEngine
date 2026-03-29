@@ -1,0 +1,85 @@
+# ─────────────────────────────────────────────
+# API & Service Dependencies (pip-audit checked in CI)
+# ML training packages (torch, mlflow, xgboost, lightgbm) are in
+# requirements.txt but excluded here — they run in isolated
+# training containers, not in the public-facing scoring service.
+# ─────────────────────────────────────────────
+
+# Core
+psycopg2-binary==2.9.10
+sqlalchemy==2.0.36
+redis==5.2.1
+kafka-python==2.0.3
+pydantic==2.10.4
+python-dotenv==1.0.1
+
+# ML Inference (scikit-learn, numpy, pandas — no known critical CVEs)
+scikit-learn==1.6.0
+numpy==1.26.4
+pandas==2.2.3
+
+# Explainability
+shap==0.46.0
+lime==0.2.0.1
+
+# Bias & Fairness
+fairlearn==0.11.0
+aif360==0.6.1
+
+# Feature Store
+feast==0.54.0
+
+# Scoring Service — FastAPI
+fastapi==0.115.6
+uvicorn==0.34.0
+httpx==0.28.1
+
+# Intervention Engine
+celery==5.4.0
+apprise==1.9.1
+twilio==9.1.0
+
+# Visualization
+plotly==5.24.1
+dash==2.18.2
+dash-bootstrap-components==1.6.0
+
+# Feedback & Retraining
+evidently==0.7.17
+
+# Debezium CDC
+requests==2.33.0
+
+# Cassandra
+cassandra-driver==3.29.2
+
+# Prometheus
+prometheus-fastapi-instrumentator==7.0.2
+prometheus-client==0.21.1
+
+# Utilities
+joblib==1.4.2
+
+# GenAI
+groq==0.13.0
+
+# Pin pyarrow
+pyarrow==18.1.0
+
+# Security
+python-jose[cryptography]==3.5.0
+passlib[bcrypt]==1.7.4
+slowapi==0.1.9
+bleach==6.1.0
+cryptography==46.0.6
+azure-keyvault-secrets==4.8.0
+azure-identity==1.17.1
+
+# ─────────────────────────────────────────────
+# Pinned transitive deps to fix CVEs
+# (pulled in by fastapi, dash, feast — pinning here forces upgrades)
+# ─────────────────────────────────────────────
+starlette>=0.49.1
+werkzeug>=3.1.6
+flask>=3.1.3
+pygments>=2.19.3
